@@ -9,6 +9,7 @@ module com.example.ssicecreamsshop {
             requires org.kordamp.ikonli.javafx;
             requires org.kordamp.bootstrapfx.core;
     requires org.kordamp.ikonli.fontawesome5;
+    requires org.json;
 
     opens com.example.ssicecreamsshop to javafx.fxml;
     exports com.ssicecreamsshop;

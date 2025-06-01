@@ -1,17 +1,31 @@
 package com.ssicecreamsshop;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Parent;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.scene.paint.Color;
 
+// Required for JSON parsing. Ensure org.json.jar is in your classpath
+// or added as a dependency in your build tool (e.g., Maven, Gradle).
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap; // Preserves category order
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,27 +33,116 @@ import java.util.stream.Collectors;
 
 public class NewOrderView {
 
+    // Inner class to represent a menu item
+    private static class MenuItem {
+        String name;
+        String imageName; // e.g., "vanilla.png"
+        int price;
+
+        MenuItem(String name, String imageName, int price) {
+            this.name = name;
+            this.imageName = imageName;
+            this.price = price;
+        }
+
+        public String getName() { return name; }
+        public String getImageName() { return imageName; }
+        public int getPrice() { return price; }
+    }
+
     private static VBox cartBox;
     private static Label totalLabel;
     private static VBox menuVBox; // Displays menu items (TitledPanes)
     private static TextField searchField;
-    private static Map<String, Integer> cartItems = new HashMap<>(); // Flavor -> Quantity
+    private static Map<String, Integer> cartItems = new HashMap<>(); // Flavor Name (String) -> Quantity (Integer)
 
-    // Prices for each ice cream flavor
-    private static final Map<String, Integer> prices = Map.of(
-            "Vanilla", 30, "Chocolate", 35, "Strawberry", 40,
-            "Mango", 45, "Cookie Dough", 50, "Mint", 38
-    );
-
-    // Categories and their respective ice cream flavors
-    private static final Map<String, List<String>> categories = Map.of(
-            "Cones", List.of("Vanilla", "Strawberry", "Mango", "Mint"),
-            "Cups", List.of("Cookie Dough"),
-            "Bars", List.of("Chocolate")
-    );
+    // Data structures to hold loaded menu items
+    // Map: Category Name -> List of MenuItems in that category
+    private static final Map<String, List<MenuItem>> categorizedMenuItems = new LinkedHashMap<>();
+    // Map: Flavor Name -> MenuItem object (for quick lookup of details)
+    private static final Map<String, MenuItem> allMenuItems = new HashMap<>();
 
     // Store TitledPane references for expand/collapse all
-    private static List<TitledPane> categoryPanes;
+    private static List<TitledPane> categoryPanesList; // Renamed to avoid conflict
+
+    // Static initializer block to load menu items from JSON when the class is loaded
+    static {
+        loadMenuItemsFromJson();
+    }
+
+    /**
+     * Loads menu items from the menu_items.json file.
+     * Populates categorizedMenuItems and allMenuItems.
+     */
+    private static void loadMenuItemsFromJson() {
+        String jsonFilePath = "/menu_items.json"; // Path within resources
+        try (InputStream inputStream = NewOrderView.class.getResourceAsStream(jsonFilePath)) {
+            if (inputStream == null) {
+                System.err.println("Cannot find " + jsonFilePath + ". Please ensure it's in the resources folder.");
+                showErrorDialog("Menu Configuration Error", "Could not load menu items (" + jsonFilePath + " not found). Please contact support.");
+                return;
+            }
+
+            // Read the JSON file content
+            String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+                    .lines().collect(Collectors.joining("\n"));
+
+            JSONObject jsonObject = new JSONObject(jsonText);
+            JSONArray categoriesArray = jsonObject.getJSONArray("categories");
+
+            categorizedMenuItems.clear();
+            allMenuItems.clear();
+
+            for (int i = 0; i < categoriesArray.length(); i++) {
+                JSONObject categoryObj = categoriesArray.getJSONObject(i);
+                String categoryName = categoryObj.getString("name");
+                JSONArray itemsArray = categoryObj.getJSONArray("items");
+                List<MenuItem> itemList = new ArrayList<>();
+
+                for (int j = 0; j < itemsArray.length(); j++) {
+                    JSONObject itemObj = itemsArray.getJSONObject(j);
+                    String itemName = itemObj.getString("name");
+                    String itemImageName = itemObj.getString("imageName");
+                    int itemPrice = itemObj.getInt("price");
+
+                    MenuItem menuItem = new MenuItem(itemName, itemImageName, itemPrice);
+                    itemList.add(menuItem);
+                    allMenuItems.put(itemName, menuItem); // For quick lookup by name
+                }
+                if (!itemList.isEmpty()) {
+                    categorizedMenuItems.put(categoryName, itemList);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error reading " + jsonFilePath + ": " + e.getMessage());
+            showErrorDialog("File Read Error", "Error reading menu configuration: " + e.getMessage());
+        } catch (JSONException e) {
+            System.err.println("Error parsing " + jsonFilePath + ": " + e.getMessage());
+            showErrorDialog("JSON Parsing Error", "Error parsing menu configuration: " + e.getMessage() + ". Please check the JSON file format.");
+        } catch (Exception e) {
+            System.err.println("An unexpected error occurred while loading menu items: " + e.getMessage());
+            e.printStackTrace(); // Print stack trace for detailed debugging
+            showErrorDialog("Unexpected Error", "An unexpected error occurred while loading menu items: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Displays an error dialog to the user.
+     * Ensures the dialog is shown on the JavaFX Application Thread.
+     * @param title Title of the error dialog.
+     * @param content Content message of the error dialog.
+     */
+    private static void showErrorDialog(String title, String content) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(null);
+            alert.setContentText(content);
+            alert.showAndWait();
+            // Consider disabling UI elements or navigating away if the error is critical
+        });
+    }
+
 
     public static void show() {
         // --- Top Bar: Back Button, Control Buttons ---
@@ -60,37 +163,33 @@ public class NewOrderView {
         HBox controlButtons = new HBox(10, expandAllBtn, collapseAllBtn);
         controlButtons.setAlignment(Pos.CENTER_LEFT);
 
-        // Top bar container
-        HBox topBar = new HBox(30, backButton, controlButtons); // Increased spacing
+        HBox topBar = new HBox(30, backButton, controlButtons);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(20, 30, 15, 30)); // Adjusted padding
-        topBar.setStyle("-fx-background-color: #e2e8f0;"); // Light gray background for top bar
+        topBar.setPadding(new Insets(20, 30, 15, 30));
+        topBar.setStyle("-fx-background-color: #e2e8f0;");
 
         // --- Left Section: Menu ---
-        // Search bar
         searchField = new TextField();
-        searchField.setPromptText("Search Ice Cream Flavors...");
+        searchField.setPromptText("Search Ice Cream (Name or Price)..."); // Updated prompt
         searchField.setStyle("-fx-font-size: 14px; -fx-padding: 8px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
-        searchField.setMaxWidth(Double.MAX_VALUE); // Allow search to take available width
+        searchField.setMaxWidth(Double.MAX_VALUE);
         searchField.textProperty().addListener((obs, oldVal, newVal) -> populateMenu(newVal));
 
-        // Container for menu items (TitledPanes)
-        menuVBox = new VBox(15); // Spacing between TitledPanes
+        menuVBox = new VBox(15);
         menuVBox.setPadding(new Insets(20));
-        menuVBox.setStyle("-fx-background-color: #f7fafc;"); // Very light background for menu area
-        populateMenu(""); // Initial population of the menu
+        menuVBox.setStyle("-fx-background-color: #f7fafc;");
+        populateMenu(""); // Initial population
 
-        // Scrollable pane for the menu
         ScrollPane menuScroll = new ScrollPane(menuVBox);
         menuScroll.setFitToWidth(true);
         menuScroll.setFitToHeight(true);
-        menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // Hide horizontal scrollbar
-        menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;"); // Make ScrollPane background transparent
+        menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
         // --- Right Section: Cart ---
-        cartBox = new VBox(10); // Spacing for items in cart
+        cartBox = new VBox(10);
         cartBox.setPadding(new Insets(15));
-        cartBox.setStyle("-fx-background-color: #fffff0; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;"); // Ivory background, light border
+        cartBox.setStyle("-fx-background-color: #fffff0; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;");
 
         ScrollPane cartScroll = new ScrollPane(cartBox);
         cartScroll.setFitToWidth(true);
@@ -98,14 +197,13 @@ public class NewOrderView {
         cartScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         cartScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
-        totalLabel = new Label("Total: ₹0");
-        totalLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c5282;"); // Dark blue text
-        totalLabel.setPadding(new Insets(10, 0, 0, 0)); // Add some top padding
+        totalLabel = new Label("Total: ₹0.00");
+        totalLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c5282;");
+        totalLabel.setPadding(new Insets(10, 0, 0, 0));
 
         Button clearBtn = new Button("Clear Cart");
-        styleActionButton(clearBtn, "#ef4444", "#dc2626"); // Reddish color
+        styleActionButton(clearBtn, "#ef4444", "#dc2626");
         clearBtn.setOnAction(e -> {
-            // Confirmation Dialog for clearing cart
             Alert confirmClear = new Alert(Alert.AlertType.CONFIRMATION);
             confirmClear.setTitle("Confirm Clear Cart");
             confirmClear.setHeaderText("Are you sure you want to empty your cart?");
@@ -118,7 +216,7 @@ public class NewOrderView {
         });
 
         Button placeOrderBtn = new Button("Place Order");
-        styleActionButton(placeOrderBtn, "#10b981", "#059669"); // Greenish color
+        styleActionButton(placeOrderBtn, "#10b981", "#059669");
         placeOrderBtn.setOnAction(e -> {
             if (cartItems.isEmpty()) {
                 Alert emptyCartAlert = new Alert(Alert.AlertType.WARNING, "Your cart is empty. Please add items to place an order.", ButtonType.OK);
@@ -133,137 +231,131 @@ public class NewOrderView {
             alert.showAndWait();
             cartItems.clear();
             refreshCart();
-            MainView.show(); // Go back to main view after placing order
+            MainView.show();
         });
 
         HBox actionButtons = new HBox(15, clearBtn, placeOrderBtn);
-        actionButtons.setAlignment(Pos.CENTER_RIGHT); // Align buttons to the right
+        actionButtons.setAlignment(Pos.CENTER_RIGHT);
         actionButtons.setPadding(new Insets(10,0,0,0));
 
-        // Cart section container
-        VBox cartSection = new VBox(15, new Label("Your Order"), cartScroll, totalLabel, actionButtons);
-        cartSection.setPadding(new Insets(20));
-        cartSection.setStyle("-fx-background-color: #f0f9ff; -fx-background-radius: 8px;"); // Light blue background for cart section
-        ((Label)cartSection.getChildren().get(0)).setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1e40af;"); // Style "Your Order" label
-        VBox.setVgrow(cartScroll, Priority.ALWAYS); // Make cartScroll take available vertical space
+        Label cartTitleLabel = new Label("Your Order");
+        cartTitleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1e40af;");
 
-        // --- Main Layout: SplitPane for Menu and Cart ---
+        VBox cartSection = new VBox(15, cartTitleLabel, cartScroll, totalLabel, actionButtons);
+        cartSection.setPadding(new Insets(20));
+        cartSection.setStyle("-fx-background-color: #f0f9ff; -fx-background-radius: 8px;");
+        VBox.setVgrow(cartScroll, Priority.ALWAYS);
+
         SplitPane splitPane = new SplitPane(menuScroll, cartSection);
-        splitPane.setDividerPositions(0.65); // Menu takes 65% of width, Cart 35%
-        // Ensure SplitPane itself grows
+        splitPane.setDividerPositions(0.65);
         HBox.setHgrow(splitPane, Priority.ALWAYS);
         VBox.setVgrow(splitPane, Priority.ALWAYS);
 
-
-        // Overall layout container
         VBox mainLayout = new VBox(topBar, splitPane);
-        VBox.setVgrow(splitPane, Priority.ALWAYS); // Ensure splitPane (and thus its content) fills vertical space
-        mainLayout.setStyle("-fx-background-color: #cbd5e1;"); // A neutral background for the whole view
+        VBox.setVgrow(splitPane, Priority.ALWAYS);
+        mainLayout.setStyle("-fx-background-color: #cbd5e1;");
 
-        // Set the screen
-        AppLauncher.setScreen(mainLayout); // Use mainLayout directly
+        AppLauncher.setScreen(mainLayout);
+        refreshCart(); // Refresh cart display on initial show
     }
 
-    /**
-     * Helper method to style control buttons (Expand/Collapse All).
-     */
     private static void styleControlButton(Button button) {
         String baseStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white;";
-        String normalColor = "-fx-background-color: #64748b;"; // Slate
+        String normalColor = "-fx-background-color: #64748b;";
         String hoverColor = "-fx-background-color: #475569;";
         button.setStyle(baseStyle + normalColor);
         button.setOnMouseEntered(e -> button.setStyle(baseStyle + hoverColor));
         button.setOnMouseExited(e -> button.setStyle(baseStyle + normalColor));
     }
 
-    /**
-     * Helper method to style action buttons (Clear Cart, Place Order).
-     */
     private static void styleActionButton(Button button, String normalHex, String hoverHex) {
         String baseStyle = "-fx-font-size: 16px; -fx-padding: 10 20; -fx-background-radius: 8px; -fx-text-fill: white; -fx-font-weight: bold;";
         button.setStyle(baseStyle + "-fx-background-color: " + normalHex + ";");
         button.setOnMouseEntered(e -> button.setStyle(baseStyle + "-fx-background-color: " + hoverHex + "; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0.2, 0, 1);"));
         button.setOnMouseExited(e -> button.setStyle(baseStyle + "-fx-background-color: " + normalHex + ";"));
-        button.setMinWidth(120); // Ensure buttons have a decent minimum width
+        button.setMinWidth(120);
     }
 
-
-    /**
-     * Populates the menuVBox with TitledPanes for each category,
-     * containing cards for each ice cream flavor.
-     * Filters flavors based on the search filter.
-     * @param filter The text to filter ice cream flavors by (case-insensitive).
-     */
     private static void populateMenu(String filter) {
-        menuVBox.getChildren().clear(); // Clear previous items except search field
-        menuVBox.getChildren().add(searchField); // Re-add search field at the top
-        categoryPanes = new java.util.ArrayList<>(); // Reset list of panes
+        menuVBox.getChildren().clear();
+        menuVBox.getChildren().add(searchField);
+        categoryPanesList = new ArrayList<>();
 
-        for (Map.Entry<String, List<String>> categoryEntry : categories.entrySet()) {
+        if (categorizedMenuItems.isEmpty() && allMenuItems.isEmpty()) {
+            Label errorLabel = new Label("Menu items could not be loaded.\nPlease check the configuration or contact support.");
+            errorLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: red; -fx-padding: 20px;");
+            errorLabel.setAlignment(Pos.CENTER);
+            menuVBox.getChildren().add(errorLabel);
+            return;
+        }
+
+        String lowerCaseFilter = (filter == null) ? "" : filter.toLowerCase().trim();
+
+        for (Map.Entry<String, List<MenuItem>> categoryEntry : categorizedMenuItems.entrySet()) {
             String categoryName = categoryEntry.getKey();
-            List<String> flavorsInCategory = categoryEntry.getValue();
+            List<MenuItem> itemsInCategory = categoryEntry.getValue();
 
-            List<String> filteredFlavors = flavorsInCategory.stream()
-                    .filter(flavor -> filter == null || filter.isEmpty() || flavor.toLowerCase().contains(filter.toLowerCase()))
+            List<MenuItem> filteredItems = itemsInCategory.stream()
+                    .filter(item -> {
+                        if (lowerCaseFilter.isEmpty()) {
+                            return true; // No filter, show all items
+                        }
+                        // Check if name contains the filter
+                        boolean nameMatches = item.getName().toLowerCase().contains(lowerCaseFilter);
+                        // Check if price (as string) contains the filter
+                        boolean priceMatches = String.valueOf(item.getPrice()).contains(lowerCaseFilter);
+                        return nameMatches || priceMatches;
+                    })
                     .collect(Collectors.toList());
 
-            if (filteredFlavors.isEmpty() && !(filter == null || filter.isEmpty())) { // Only skip if filtering and no results
-                continue;
+            if (filteredItems.isEmpty() && !lowerCaseFilter.isEmpty()) {
+                continue; // Skip category if filter applied and no items match in this category
             }
 
-            FlowPane itemsPane = new FlowPane(15, 15); // Gap between items
+            FlowPane itemsPane = new FlowPane(15, 15);
             itemsPane.setPadding(new Insets(15));
-            itemsPane.setAlignment(Pos.TOP_LEFT); // Align items from top-left
+            itemsPane.setAlignment(Pos.TOP_LEFT);
 
-            for (String flavor : filteredFlavors) {
-                itemsPane.getChildren().add(createFlavorCard(flavor));
+            for (MenuItem item : filteredItems) {
+                itemsPane.getChildren().add(createFlavorCard(item));
             }
 
-            TitledPane categoryPane = new TitledPane(categoryName + " (" + filteredFlavors.size() + ")", itemsPane);
-            categoryPane.setAnimated(true); // Smooth expand/collapse
-            categoryPane.setExpanded(true); // Default to expanded
-            categoryPane.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #334155;"); // Style TitledPane title
-            menuVBox.getChildren().add(categoryPane);
-            categoryPanes.add(categoryPane);
+            if (!itemsPane.getChildren().isEmpty() || lowerCaseFilter.isEmpty()) {
+                TitledPane categoryPane = new TitledPane(categoryName + " (" + filteredItems.size() + ")", itemsPane);
+                categoryPane.setAnimated(true);
+                categoryPane.setExpanded(true); // Default to expanded, or based on filter
+                categoryPane.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #334155;");
+                menuVBox.getChildren().add(categoryPane);
+                categoryPanesList.add(categoryPane);
+            }
         }
     }
 
-    /**
-     * Creates a VBox card for a given ice cream flavor.
-     * @param flavor The name of the ice cream flavor.
-     * @return A VBox representing the flavor card.
-     */
-    private static VBox createFlavorCard(String flavor) {
-        int price = prices.getOrDefault(flavor, 0);
-
+    private static VBox createFlavorCard(MenuItem item) {
         ImageView imgView = new ImageView();
+        String imagePath = "/images/" + item.getImageName(); // Image path from MenuItem
         try {
-            String imagePath = "/images/" + flavor.toLowerCase().replace(" ", "_") + ".png";
             Image img = new Image(NewOrderView.class.getResourceAsStream(imagePath));
-            if (img.isError()) { // Check if image loaded correctly
-                throw new NullPointerException("Image load error for " + imagePath);
+            if (img.isError()) {
+                throw new NullPointerException("Image load error for " + imagePath + ": " + img.getException());
             }
             imgView.setImage(img);
         } catch (Exception e) {
-            System.err.println("Error loading image for " + flavor + ": " + e.getMessage());
-            // Fallback: Placeholder if image is missing
-            Label placeholder = new Label(flavor.substring(0,1)); // First letter as placeholder
-            placeholder.setStyle("-fx-font-size: 30px; -fx-alignment: center; -fx-border-color: #cbd5e1; -fx-border-width: 1; -fx-background-color: #e2e8f0;");
-            placeholder.setPrefSize(100,100);
-            placeholder.setAlignment(Pos.CENTER);
-            imgView.setImage(null); // Ensure no broken image icon
-            // In a real app, you might set a default placeholder image to imgView
+            System.err.println("Error loading image " + imagePath + " for " + item.getName() + ": " + e.getMessage());
+            imgView.setImage(null); // Important to set to null if error
         }
         imgView.setFitWidth(100);
         imgView.setFitHeight(100);
         imgView.setPreserveRatio(true);
 
-        Label nameLabel = new Label(flavor);
+        Label nameLabel = new Label(item.getName());
         nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
-        Label priceLabel = new Label("₹" + price);
+        Label priceLabel = new Label("₹" + item.getPrice());
         priceLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #475569;");
 
-        VBox card = new VBox(8, imgView.getImage() != null ? imgView : createPlaceholderGraphic(flavor) , nameLabel, priceLabel);
+        Node imageNode = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 100);
+
+        VBox card = new VBox(8, imageNode, nameLabel, priceLabel);
         card.setAlignment(Pos.CENTER);
         card.setPadding(new Insets(12));
         String baseCardStyle = "-fx-background-color: #ffffff; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-color: #e2e8f0; -fx-border-width: 1px;";
@@ -272,39 +364,35 @@ public class NewOrderView {
         card.setStyle(baseCardStyle);
         card.setOnMouseEntered(e -> card.setStyle(hoverCardStyle));
         card.setOnMouseExited(e -> card.setStyle(baseCardStyle));
-        card.setOnMouseClicked(e -> addToCart(flavor));
-        card.setMinWidth(150); // Ensure cards have a minimum width
-        card.setMaxWidth(150); // And a maximum width for consistency in FlowPane
+        card.setOnMouseClicked(e -> addToCart(item.getName())); // Add by name
+        card.setMinWidth(150);
+        card.setMaxWidth(150);
 
         return card;
     }
 
-    private static Pane createPlaceholderGraphic(String flavor) {
-        Label placeholderText = new Label(flavor.length() > 0 ? flavor.substring(0, 1).toUpperCase() : "?");
-        placeholderText.setFont(Font.font("System", FontWeight.BOLD, 40));
+    private static Pane createPlaceholderGraphic(String text, double size) {
+        Label placeholderText = new Label(text.length() > 0 ? text.substring(0, 1).toUpperCase() : "?");
+        placeholderText.setFont(Font.font("System", FontWeight.BOLD, size * 0.4)); // Scale font size
         placeholderText.setTextFill(Color.SLATEGRAY);
         StackPane placeholderPane = new StackPane(placeholderText);
-        placeholderPane.setPrefSize(100, 100);
-        placeholderPane.setMinSize(100,100);
-        placeholderPane.setMaxSize(100,100);
+        placeholderPane.setPrefSize(size, size);
+        placeholderPane.setMinSize(size,size);
+        placeholderPane.setMaxSize(size,size);
         placeholderPane.setStyle("-fx-background-color: #e2e8f0; -fx-border-color: #cbd5e1; -fx-border-width: 1px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
         placeholderPane.setAlignment(Pos.CENTER);
         return placeholderPane;
     }
 
-
-    /**
-     * Adds an item to the cart or increments its quantity.
-     * @param flavor The flavor to add.
-     */
-    private static void addToCart(String flavor) {
-        cartItems.put(flavor, cartItems.getOrDefault(flavor, 0) + 1);
+    private static void addToCart(String itemName) {
+        if (!allMenuItems.containsKey(itemName)) {
+            System.err.println("Attempted to add unknown item to cart: " + itemName);
+            return; // Do not add if item is not recognized
+        }
+        cartItems.put(itemName, cartItems.getOrDefault(itemName, 0) + 1);
         refreshCart();
     }
 
-    /**
-     * Refreshes the cart display with current items and total.
-     */
     private static void refreshCart() {
         cartBox.getChildren().clear();
         if (cartItems.isEmpty()) {
@@ -312,75 +400,71 @@ public class NewOrderView {
             emptyCartLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #64748b;");
             emptyCartLabel.setPadding(new Insets(20));
             cartBox.getChildren().add(emptyCartLabel);
-            cartBox.setAlignment(Pos.CENTER); // Center the empty message
-        } else {
-            cartBox.setAlignment(Pos.TOP_LEFT); // Align items to top when not empty
-            double currentTotal = 0;
-            for (Map.Entry<String, Integer> entry : cartItems.entrySet()) {
-                String flavor = entry.getKey();
-                int quantity = entry.getValue();
-                int pricePerItem = prices.getOrDefault(flavor, 0);
-                double subtotal = quantity * pricePerItem;
-                currentTotal += subtotal;
-
-                cartBox.getChildren().add(createCartItemBox(flavor, quantity, pricePerItem, subtotal));
-            }
-            totalLabel.setText(String.format("Total: ₹%.2f", currentTotal));
-        }
-        // If cartItems became empty after an operation (e.g. removing last item)
-        if (cartItems.isEmpty()) {
+            cartBox.setAlignment(Pos.CENTER);
             totalLabel.setText("Total: ₹0.00");
+            return;
         }
+
+        cartBox.setAlignment(Pos.TOP_LEFT);
+        double currentTotal = 0;
+        for (Map.Entry<String, Integer> entry : cartItems.entrySet()) {
+            String itemName = entry.getKey();
+            int quantity = entry.getValue();
+            MenuItem item = allMenuItems.get(itemName); // Get MenuItem from its name
+
+            if (item == null) { // Should not happen if addToCart is robust
+                System.err.println("Item " + itemName + " not found in allMenuItems during cart refresh.");
+                continue;
+            }
+
+            double subtotal = quantity * item.getPrice();
+            currentTotal += subtotal;
+            cartBox.getChildren().add(createCartItemBox(item, quantity, subtotal));
+        }
+        totalLabel.setText(String.format("Total: ₹%.2f", currentTotal));
     }
 
-    /**
-     * Creates an HBox representing an item in the cart.
-     */
-    private static HBox createCartItemBox(String flavor, int quantity, int pricePerItem, double subtotal) {
+    private static HBox createCartItemBox(MenuItem item, int quantity, double subtotal) {
         ImageView imgView = new ImageView();
+        String imagePath = "/images/" + item.getImageName();
         try {
-            String imagePath = "/images/" + flavor.toLowerCase().replace(" ", "_") + ".png";
             Image img = new Image(NewOrderView.class.getResourceAsStream(imagePath));
             if (img.isError()) {
-                throw new NullPointerException("Image load error for " + imagePath);
+                throw new NullPointerException("Image load error for " + imagePath + ": " + img.getException());
             }
             imgView.setImage(img);
         } catch (Exception e) {
-            // Silently ignore, placeholder will be used by createPlaceholderGraphic
+            System.err.println("Error loading cart image " + imagePath + " for " + item.getName() + ": " + e.getMessage());
             imgView.setImage(null);
         }
         imgView.setFitWidth(50);
         imgView.setFitHeight(50);
         imgView.setPreserveRatio(true);
 
-        Label nameLabel = new Label(flavor);
-        // --- MODIFICATION START: Changed text fill color ---
-        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"); // Dark slate gray
-        // --- MODIFICATION END ---
-        Label priceInfoLabel = new Label(String.format("₹%d x %d", pricePerItem, quantity));
+        Label nameLabel = new Label(item.getName());
+        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
+        Label priceInfoLabel = new Label(String.format("₹%d x %d", item.getPrice(), quantity));
         priceInfoLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #4b5563;");
-        Label subtotalLabel = new Label(String.format("Sub: ₹%.2f", subtotal));
-        subtotalLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;"); // Consistent with other bold blue text
-
+        Label subtotalLabelText = new Label(String.format("Sub: ₹%.2f", subtotal));
+        subtotalLabelText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;");
 
         Button plusButton = new Button("+");
         styleCartControlButton(plusButton);
         plusButton.setOnAction(e -> {
-            cartItems.put(flavor, cartItems.get(flavor) + 1);
+            cartItems.put(item.getName(), cartItems.get(item.getName()) + 1);
             refreshCart();
         });
 
         Label quantityLabel = new Label(String.valueOf(quantity));
         quantityLabel.setStyle("-fx-font-size: 14px; -fx-padding: 0 5px;");
 
-
         Button minusButton = new Button("-");
         styleCartControlButton(minusButton);
         minusButton.setOnAction(e -> {
-            if (cartItems.get(flavor) > 1) {
-                cartItems.put(flavor, cartItems.get(flavor) - 1);
+            if (cartItems.get(item.getName()) > 1) {
+                cartItems.put(item.getName(), cartItems.get(item.getName()) - 1);
             } else {
-                cartItems.remove(flavor);
+                cartItems.remove(item.getName());
             }
             refreshCart();
         });
@@ -390,28 +474,17 @@ public class NewOrderView {
 
         VBox itemDetails = new VBox(5, nameLabel, priceInfoLabel, quantityControls);
         itemDetails.setAlignment(Pos.CENTER_LEFT);
-        HBox.setHgrow(itemDetails, Priority.ALWAYS); // Allow itemDetails to take available space
+        HBox.setHgrow(itemDetails, Priority.ALWAYS);
 
-        VBox subtotalAndRemove = new VBox(5, subtotalLabel);
+        VBox subtotalAndRemove = new VBox(5, subtotalLabelText);
         subtotalAndRemove.setAlignment(Pos.CENTER_RIGHT);
 
+        Node imageNodeCart = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 50);
 
-        HBox cartItemBox = new HBox(10, (imgView.getImage() != null ? imgView : createPlaceholderGraphic(flavor)), itemDetails, subtotalAndRemove);
+        HBox cartItemBox = new HBox(10, imageNodeCart, itemDetails, subtotalAndRemove);
         cartItemBox.setPadding(new Insets(10));
         cartItemBox.setStyle("-fx-background-color: #f0f9ff; -fx-background-radius: 8px; -fx-border-color: #e0f2fe; -fx-border-width: 1px;");
         cartItemBox.setAlignment(Pos.CENTER_LEFT);
-
-        // Ensure placeholder also has a fixed size in cart
-        if(imgView.getImage() == null) {
-            Pane placeholder = (Pane) cartItemBox.getChildren().get(0);
-            placeholder.setPrefSize(50,50);
-            placeholder.setMinSize(50,50);
-            placeholder.setMaxSize(50,50);
-            if (placeholder.getChildren().get(0) instanceof Label) { // Check if the child is a Label
-                ((Label)placeholder.getChildren().get(0)).setFont(Font.font("System", FontWeight.BOLD, 20));
-            }
-        }
-
 
         return cartItemBox;
     }
@@ -422,14 +495,9 @@ public class NewOrderView {
         button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;"));
     }
 
-
-    /**
-     * Expands or collapses all category TitledPanes in the menu.
-     * @param expand True to expand all, false to collapse all.
-     */
     private static void toggleAllCategoryPanes(boolean expand) {
-        if (categoryPanes != null) {
-            for (TitledPane pane : categoryPanes) {
+        if (categoryPanesList != null) {
+            for (TitledPane pane : categoryPanesList) {
                 pane.setExpanded(expand);
             }
         }
