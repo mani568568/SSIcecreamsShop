@@ -354,11 +354,13 @@ public class NewOrderView {
         imgView.setPreserveRatio(true);
 
         Label nameLabel = new Label(flavor);
-        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
+        // --- MODIFICATION START: Changed text fill color ---
+        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;"); // Dark slate gray
+        // --- MODIFICATION END ---
         Label priceInfoLabel = new Label(String.format("₹%d x %d", pricePerItem, quantity));
         priceInfoLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #4b5563;");
         Label subtotalLabel = new Label(String.format("Sub: ₹%.2f", subtotal));
-        subtotalLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+        subtotalLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;"); // Consistent with other bold blue text
 
 
         Button plusButton = new Button("+");
@@ -405,7 +407,9 @@ public class NewOrderView {
             placeholder.setPrefSize(50,50);
             placeholder.setMinSize(50,50);
             placeholder.setMaxSize(50,50);
-            ((Label)((StackPane)placeholder).getChildren().get(0)).setFont(Font.font("System", FontWeight.BOLD, 20));
+            if (placeholder.getChildren().get(0) instanceof Label) { // Check if the child is a Label
+                ((Label)placeholder.getChildren().get(0)).setFont(Font.font("System", FontWeight.BOLD, 20));
+            }
         }
 
 
