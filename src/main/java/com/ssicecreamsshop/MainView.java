@@ -1,15 +1,19 @@
 package com.ssicecreamsshop;
 
-import com.ssicecreamsshop.config.ConfigurationDialog; // Import the configuration dialog
+import com.ssicecreamsshop.config.ConfigurationDialog;
+// import com.ssicecreamsshop.utils.ExcelExportUtil; // Removed as export is no longer here
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Button; // Import Button
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+// import javafx.stage.Stage; // No longer needed here for export
 
 public class MainView {
 
@@ -20,40 +24,46 @@ public class MainView {
 
         // --- Configuration Button ---
         Button configButton = new Button("⚙️ Configuration");
-        configButton.setStyle("-fx-font-size: 14px; -fx-background-color: #607d8b; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8px;");
-        configButton.setOnMouseEntered(e -> configButton.setStyle("-fx-font-size: 14px; -fx-background-color: #546e7a; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0.1, 0, 1);"));
-        configButton.setOnMouseExited(e -> configButton.setStyle("-fx-font-size: 14px; -fx-background-color: #607d8b; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8px;"));
+        String configButtonStyle = "-fx-font-size: 14px; -fx-background-color: #607d8b; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8px;";
+        String configButtonHoverStyle = "-fx-font-size: 14px; -fx-background-color: #546e7a; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0.1, 0, 1);";
+        configButton.setStyle(configButtonStyle);
+        configButton.setOnMouseEntered(e -> configButton.setStyle(configButtonHoverStyle));
+        configButton.setOnMouseExited(e -> configButton.setStyle(configButtonStyle));
         configButton.setOnAction(e -> ConfigurationDialog.show());
 
-        // HBox for top controls (like the config button)
-        HBox topControlsBox = new HBox(configButton);
-        topControlsBox.setAlignment(Pos.TOP_RIGHT); // Align button to the top-right
-        topControlsBox.setPadding(new Insets(0, 0, 20, 0)); // Add some space below the button
+        // --- Excel Export Button (REMOVED) ---
+        // Button excelExportButton = new Button("📤 Export to Excel");
+        // ... (styling and action for export button removed)
+
+
+        // HBox for top controls
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        // Removed excelExportButton from here. Only configButton remains on the right.
+        // If you want other buttons on the left, they would go before the spacer.
+        // For now, let's assume only config button is desired at the top right.
+        HBox topControlsBox = new HBox(spacer, configButton);
+        topControlsBox.setAlignment(Pos.CENTER_RIGHT); // Aligns the HBox content (spacer pushes config to right)
+        topControlsBox.setPadding(new Insets(0, 0, 20, 0));
 
 
         // Ice Cream Icon for Order Card
         ImageView iceCreamIcon = null;
-        // Try to load from the default resource path first, then consider configured path if needed
-        // For main view icons, keeping them as resources is usually fine.
-        // The configurable paths are primarily for menu item images.
         try {
             Image img = new Image(MainView.class.getResourceAsStream("/images/ice_cream.png"));
             iceCreamIcon = new ImageView(img);
         } catch (NullPointerException e) {
             System.err.println("Error loading image: /images/ice_cream.png. Make sure it's in the resources/images folder.");
             iceCreamIcon = new ImageView();
-            // Label placeholder = new Label("Order Icon"); // Not added to scene, just for info
-            // placeholder.setStyle("-fx-border-color: black; -fx-padding: 20px;");
             iceCreamIcon.setFitWidth(50);
             iceCreamIcon.setFitHeight(50);
         }
         if (iceCreamIcon.getImage() != null && !iceCreamIcon.getImage().isError()) {
             iceCreamIcon.setFitWidth(400);
             iceCreamIcon.setFitHeight(400);
-        } else { // Fallback if image failed to load or is error
-            iceCreamIcon.setFitWidth(400); // Keep size consistent
+        } else {
+            iceCreamIcon.setFitWidth(400);
             iceCreamIcon.setFitHeight(400);
-            // You could set a placeholder graphic here if desired
         }
 
 
@@ -67,7 +77,7 @@ public class MainView {
         orderCard.setOnMouseExited(e -> orderCard.setStyle("-fx-background-color: #1e3a8a; -fx-background-radius: 36px; -fx-padding: 80px;"));
         orderCard.setOnMouseClicked(e -> NewOrderView.show());
 
-        // Clipboard Icon for Inventory Card (similar logic for image loading)
+        // Clipboard Icon for Inventory Card
         ImageView clipboardIcon = null;
         try {
             Image img = new Image(MainView.class.getResourceAsStream("/images/clipboard.png"));
@@ -75,8 +85,6 @@ public class MainView {
         } catch (NullPointerException e) {
             System.err.println("Error loading image: /images/clipboard.png. Make sure it's in the resources/images folder.");
             clipboardIcon = new ImageView();
-            // Label placeholder = new Label("Inventory Icon");
-            // placeholder.setStyle("-fx-border-color: black; -fx-padding: 20px;");
             clipboardIcon.setFitWidth(50);
             clipboardIcon.setFitHeight(50);
         }
@@ -103,10 +111,9 @@ public class MainView {
         HBox buttonRow = new HBox(100, orderCard, inventoryCard);
         buttonRow.setAlignment(Pos.CENTER);
 
-        // Root VBox - now includes topControlsBox
+        // Root VBox
         VBox root = new VBox(50, topControlsBox, title, buttonRow);
         root.setAlignment(Pos.CENTER);
-        // Adjusted padding to accommodate the config button potentially being at the top
         root.setPadding(new Insets(30, 50, 50, 50));
         root.setStyle("-fx-background-color: #ffe4e1;");
 

@@ -1,6 +1,8 @@
 package com.ssicecreamsshop;
 
-import com.ssicecreamsshop.config.ConfigManager; // Import ConfigManager
+import com.ssicecreamsshop.config.ConfigManager;
+import com.ssicecreamsshop.utils.ExcelExportUtil; // For export functionality
+import com.ssicecreamsshop.utils.ExcelImportDialog; // For import functionality
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -30,10 +32,6 @@ import java.util.stream.Collectors;
 
 public class ManageInventoryView {
 
-    // Paths are now retrieved from ConfigManager, no longer static final here.
-    // private static final String MENU_ITEMS_FILE_PATH = "src/main/resources/menu_items.json"; // OLD
-    // private static final String IMAGES_DIRECTORY_PATH = "src/main/resources/images/"; // OLD
-
     private static TableView<DisplayMenuItem> tableView;
     private static final ObservableList<DisplayMenuItem> menuItemsList = FXCollections.observableArrayList();
     private static File selectedImageFile;
@@ -43,13 +41,16 @@ public class ManageInventoryView {
 
     private static TextField itemNameField;
     private static TextField itemPriceField;
-    private static Stage inventoryStage; // Keep a reference to the stage for alerts
+    private static Stage inventoryStage;
 
 
     public static void show() {
-        inventoryStage = new Stage(); // Initialize here
+        inventoryStage = new Stage();
         inventoryStage.initModality(Modality.APPLICATION_MODAL);
         inventoryStage.setTitle("🍦 Manage Inventory");
+        inventoryStage.setMinWidth(900); // Increased width for delete column
+        inventoryStage.setMinHeight(700);
+
 
         // --- Input Form ---
         GridPane formPane = new GridPane();
@@ -96,7 +97,6 @@ public class ManageInventoryView {
                 new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.gif")
         );
         browseButton.setOnAction(e -> {
-            // Set initial directory for FileChooser based on configured images path
             File initialImageDir = new File(ConfigManager.getImagePath());
             if (initialImageDir.exists() && initialImageDir.isDirectory()) {
                 fileChooser.setInitialDirectory(initialImageDir);
@@ -135,20 +135,62 @@ public class ManageInventoryView {
         priceCol.setPrefWidth(100);
         priceCol.setStyle("-fx-alignment: CENTER_RIGHT;");
 
-        tableView.getColumns().addAll(categoryCol, nameCol, imageCol, priceCol);
+        // --- Delete Action Column ---
+        TableColumn<DisplayMenuItem, Void> deleteCol = new TableColumn<>("Actions");
+        deleteCol.setPrefWidth(120); // Adjusted width
+        deleteCol.setCellFactory(param -> new TableCell<>() {
+            private final Button deleteButton = new Button("Delete");
+            {
+                deleteButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 10px; -fx-padding: 3 7;");
+                deleteButton.setOnAction(event -> {
+                    DisplayMenuItem item = getTableView().getItems().get(getIndex());
+                    handleDeleteItem(item);
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(deleteButton);
+                    setAlignment(Pos.CENTER);
+                }
+            }
+        });
+
+        tableView.getColumns().addAll(categoryCol, nameCol, imageCol, priceCol, deleteCol); // Added deleteCol
         tableView.setItems(menuItemsList);
         tableView.setPlaceholder(new Label("Loading inventory... or inventory file not found."));
 
+        // --- Control Buttons for Table (Refresh, Export, Import) ---
         Button refreshButton = new Button("🔄 Refresh View");
         refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white;");
         refreshButton.setOnAction(e -> loadInventoryData());
-        HBox refreshButtonBox = new HBox(refreshButton);
-        refreshButtonBox.setAlignment(Pos.CENTER_RIGHT);
-        refreshButtonBox.setPadding(new Insets(0,0,10,0));
+
+        Button exportButton = new Button("📤 Export to Excel");
+        exportButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white;"); // Green color
+        exportButton.setOnAction(e -> ExcelExportUtil.exportToExcel(inventoryStage));
+
+        Button importButton = new Button("📥 Import from Excel");
+        // Consistent styling for import button
+        String importButtonStyle = "-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
+        String importButtonHoverStyle = "-fx-background-color: #a93226; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
+        importButton.setStyle(importButtonStyle);
+        importButton.setOnMouseEntered(e -> importButton.setStyle(importButtonHoverStyle));
+        importButton.setOnMouseExited(e -> importButton.setStyle(importButtonStyle));
+        importButton.setOnAction(e -> ExcelImportDialog.show());
+
+
+        HBox tableControlsBox = new HBox(10, refreshButton, exportButton, importButton); // Added importButton
+        tableControlsBox.setAlignment(Pos.CENTER_RIGHT);
+        tableControlsBox.setPadding(new Insets(0,0,10,0));
+
 
         Label currentInventoryLabel = new Label("Current Inventory:");
         currentInventoryLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #333;");
-        VBox bottomPane = new VBox(10, new Separator(), currentInventoryLabel, refreshButtonBox, tableView);
+        VBox bottomPane = new VBox(10, new Separator(), currentInventoryLabel, tableControlsBox, tableView);
         bottomPane.setPadding(new Insets(10, 25, 25, 25));
         VBox.setVgrow(tableView, Priority.ALWAYS);
         bottomPane.setStyle("-fx-background-color: #ffffff;");
@@ -157,10 +199,10 @@ public class ManageInventoryView {
         rootLayout.setTop(formPane);
         rootLayout.setCenter(bottomPane);
 
-        Scene scene = new Scene(rootLayout, 800, 700);
+        Scene scene = new Scene(rootLayout); // Width and height will be set by stage.setMinWidth/Height
         inventoryStage.setScene(scene);
 
-        loadInventoryData(); // Initial load
+        loadInventoryData();
 
         inventoryStage.showAndWait();
     }
@@ -194,7 +236,7 @@ public class ManageInventoryView {
         Path targetImageDir = Paths.get(ConfigManager.getImagePath());
         try {
             if (!Files.exists(targetImageDir)) {
-                Files.createDirectories(targetImageDir); // Ensure configured image directory exists
+                Files.createDirectories(targetImageDir);
             } else if (!Files.isDirectory(targetImageDir)) {
                 showAlert(Alert.AlertType.ERROR, "Configuration Error", "Configured image path is not a directory: " + targetImageDir.toString());
                 return;
@@ -220,11 +262,125 @@ public class ManageInventoryView {
         selectedImageLabel.setText("No image selected");
 
         loadInventoryData();
-        NewOrderView.loadMenuItemsFromJson(); // Refresh data in NewOrderView
-        NewOrderView.refreshMenuView(); // Also refresh its UI if it's active
+        NewOrderView.loadMenuItemsFromJson();
+        NewOrderView.refreshMenuView();
 
         showAlert(Alert.AlertType.INFORMATION, "Success", "Item '" + itemName + "' added to inventory!");
     }
+
+    private static void handleDeleteItem(DisplayMenuItem itemToDelete) {
+        Optional<ButtonType> result = showAlertWithConfirmation("Confirm Delete",
+                "Are you sure you want to delete the item '" + itemToDelete.getName() + "' from category '" + itemToDelete.getCategory() + "'?\n" +
+                        "This will also attempt to delete its image file: " + itemToDelete.getImageName());
+
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            boolean jsonUpdated = removeItemFromJson(itemToDelete);
+            if (jsonUpdated) {
+                // Attempt to delete the image file
+                if (itemToDelete.getImageName() != null && !itemToDelete.getImageName().isEmpty()) {
+                    try {
+                        Path imageDirectory = Paths.get(ConfigManager.getImagePath());
+                        Path imagePath = imageDirectory.resolve(itemToDelete.getImageName());
+
+                        if (Files.exists(imagePath) && !Files.isDirectory(imagePath)) { // Ensure it's a file
+                            Files.delete(imagePath);
+                            System.out.println("Deleted image file: " + imagePath.toString());
+                        } else if (Files.isDirectory(imagePath)) {
+                            System.out.println("Image path is a directory, not deleting: " + imagePath.toString());
+                        }
+                        else {
+                            System.out.println("Image file not found for deletion: " + imagePath.toString());
+                        }
+                    } catch (IOException e) {
+                        System.err.println("Error deleting image file " + itemToDelete.getImageName() + ": " + e.getMessage());
+                        showAlert(Alert.AlertType.WARNING, "Image Deletion Warning", "Item removed from inventory, but could not delete image file: " + itemToDelete.getImageName() + "\nError: " + e.getMessage());
+                    } catch (SecurityException se) {
+                        System.err.println("Security Exception deleting image file " + itemToDelete.getImageName() + ": " + se.getMessage());
+                        showAlert(Alert.AlertType.ERROR, "Image Deletion Error", "Permission denied when trying to delete image file: " + itemToDelete.getImageName());
+                    }
+                }
+
+                loadInventoryData(); // Refresh this view's table
+                NewOrderView.loadMenuItemsFromJson(); // Refresh data in NewOrderView
+                NewOrderView.refreshMenuView();       // Refresh NewOrderView's UI
+
+                showAlert(Alert.AlertType.INFORMATION, "Delete Successful", "Item '" + itemToDelete.getName() + "' has been deleted.");
+            } else {
+                showAlert(Alert.AlertType.ERROR, "Delete Failed", "Could not delete item '" + itemToDelete.getName() + "' from the inventory file.");
+            }
+        }
+    }
+
+    private static boolean removeItemFromJson(DisplayMenuItem itemToDelete) {
+        String menuJsonPathStr = ConfigManager.getMenuItemsJsonPath();
+        File menuFile = new File(menuJsonPathStr);
+        JSONObject rootJson;
+        boolean itemRemoved = false;
+
+        if (!menuFile.exists()) {
+            System.err.println("Cannot remove item: Menu JSON file not found at " + menuJsonPathStr);
+            return false;
+        }
+
+        try {
+            String content = new String(Files.readAllBytes(menuFile.toPath()), StandardCharsets.UTF_8);
+            rootJson = new JSONObject(content);
+            JSONArray categoriesArray = rootJson.getJSONArray("categories");
+            JSONArray updatedCategoriesArray = new JSONArray(); // To build a new array without modification issues
+
+            for (int i = 0; i < categoriesArray.length(); i++) {
+                JSONObject categoryObj = categoriesArray.getJSONObject(i);
+                if (categoryObj.getString("name").equalsIgnoreCase(itemToDelete.getCategory())) {
+                    JSONArray itemsArray = categoryObj.getJSONArray("items");
+                    JSONArray updatedItemsArray = new JSONArray();
+                    boolean itemFoundInCategory = false;
+
+                    for (int j = 0; j < itemsArray.length(); j++) {
+                        JSONObject itemObj = itemsArray.getJSONObject(j);
+                        if (itemObj.getString("name").equalsIgnoreCase(itemToDelete.getName())) {
+                            itemRemoved = true; // Mark as removed
+                            itemFoundInCategory = true;
+                            System.out.println("Removing item '" + itemToDelete.getName() + "' from category '" + itemToDelete.getCategory() + "' in JSON.");
+                        } else {
+                            updatedItemsArray.put(itemObj); // Keep other items
+                        }
+                    }
+                    // If items remain in category, or if it wasn't the target item's category
+                    if (updatedItemsArray.length() > 0) {
+                        categoryObj.put("items", updatedItemsArray);
+                        updatedCategoriesArray.put(categoryObj);
+                    } else if (!itemFoundInCategory) {
+                        // Category was not the one we modified, or it was already empty but not the target. Keep it.
+                        updatedCategoriesArray.put(categoryObj);
+                    } else {
+                        System.out.println("Category '" + itemToDelete.getCategory() + "' is now empty after item deletion and will be removed from JSON.");
+                    }
+                } else {
+                    updatedCategoriesArray.put(categoryObj); // Keep other categories
+                }
+            }
+            rootJson.put("categories", updatedCategoriesArray); // Replace with the potentially modified array
+
+            if (itemRemoved) {
+                try (FileWriter writer = new FileWriter(menuFile)) {
+                    writer.write(rootJson.toString(4));
+                    System.out.println("Successfully updated JSON after item deletion.");
+                }
+            } else {
+                System.out.println("Item '" + itemToDelete.getName() + "' not found in JSON for deletion.");
+            }
+            return itemRemoved;
+
+        } catch (IOException e) {
+            System.err.println("Error reading/writing '" + menuJsonPathStr + "' for deletion: " + e.getMessage());
+            e.printStackTrace();
+        } catch (JSONException e) {
+            System.err.println("Error parsing JSON from '" + menuJsonPathStr + "' for deletion: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return false;
+    }
+
 
     private static void addItemToJson(String categoryName, String itemName, int price, String imageName) {
         String menuJsonPathStr = ConfigManager.getMenuItemsJsonPath();
@@ -232,7 +388,6 @@ public class ManageInventoryView {
         JSONObject rootJson;
 
         try {
-            // Ensure parent directory for JSON file exists
             if (menuFile.getParentFile() != null && !menuFile.getParentFile().exists()) {
                 menuFile.getParentFile().mkdirs();
             }
@@ -276,7 +431,7 @@ public class ManageInventoryView {
                         existingItem.put("imageName", imageName);
                         itemUpdated = true;
                     } else {
-                        return; // User chose not to update
+                        return;
                     }
                     break;
                 }
@@ -290,54 +445,30 @@ public class ManageInventoryView {
                 itemsArray.put(newItem);
             }
 
-            try (FileWriter writer = new FileWriter(menuFile)) { // Use menuFile (derived from configured path)
+            try (FileWriter writer = new FileWriter(menuFile)) {
                 writer.write(rootJson.toString(4));
-                System.out.println("Item '" + itemName + (itemUpdated ? "' updated" : "' added") + " in JSON in category '" + categoryName + "'.");
             }
 
         } catch (IOException e) {
             e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "File Error", "Could not read/write '" + menuJsonPathStr + "': " + e.getMessage() +
-                    "\nPlease ensure the path is correct and the application has write permissions.");
+            showAlert(Alert.AlertType.ERROR, "File Error", "Could not read/write '" + menuJsonPathStr + "': " + e.getMessage());
         } catch (JSONException e) {
             e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "JSON Error", "Error processing '" + menuJsonPathStr + "': " + e.getMessage() +
-                    "\nThe file might be corrupted. Please check its format.");
+            showAlert(Alert.AlertType.ERROR, "JSON Error", "Error processing '" + menuJsonPathStr + "': " + e.getMessage());
         }
     }
 
-    // Make this public static so ConfigurationDialog can call it
     public static void loadInventoryData() {
         menuItemsList.clear();
         categoriesList.clear();
 
         String menuItemsPathString = ConfigManager.getMenuItemsJsonPath();
-        String imagesDirPathString = ConfigManager.getImagePath(); // Get configured images path
-
         Path menuItemsPathObj = Paths.get(menuItemsPathString);
-        Path imagesDirPathObj = Paths.get(imagesDirPathString);
-
-        // Ensure images directory exists (primarily for context, actual image use is in NewOrderView)
-        try {
-            if (!Files.exists(imagesDirPathObj)) {
-                Files.createDirectories(imagesDirPathObj);
-                System.out.println("Created images directory (from ManageInventoryView): " + imagesDirPathString);
-            } else if (!Files.isDirectory(imagesDirPathObj)) {
-                System.err.println("Configured images path is not a directory: " + imagesDirPathString);
-                showAlert(Alert.AlertType.ERROR, "Configuration Error", "Images path (" + imagesDirPathString + ") is not a directory. Please correct it in Configuration.");
-                if (tableView != null) tableView.setPlaceholder(new Label("Error: Images path is not a directory. Check Configuration."));
-                return;
-            }
-        } catch (IOException e) {
-            System.err.println("Error ensuring images directory '" + imagesDirPathString + "': " + e.getMessage());
-            showAlert(Alert.AlertType.ERROR, "File System Error", "Could not create/access images directory: " + e.getMessage());
-            if (tableView != null) tableView.setPlaceholder(new Label("Error with images directory. Check logs and Configuration."));
-            return;
-        }
 
         File menuFile = menuItemsPathObj.toFile();
 
-        if (!Files.exists(menuItemsPathObj.getParent())) {
+        // Ensure parent directory for JSON file exists
+        if (menuItemsPathObj.getParent() != null && !Files.exists(menuItemsPathObj.getParent())) {
             try {
                 Files.createDirectories(menuItemsPathObj.getParent());
             } catch (IOException e) {
@@ -348,20 +479,17 @@ public class ManageInventoryView {
             }
         }
 
-
         if (!menuFile.exists() || menuFile.length() == 0) {
             System.err.println("'" + menuItemsPathString + "' not found or is empty. Cannot load inventory.");
             if (tableView != null) {
                 tableView.setPlaceholder(new Label("'" + menuItemsPathString + "' not found or is empty.\nAdd items to create it, or check Configuration."));
             }
-            // Attempt to create a placeholder file if it doesn't exist
             if (!menuFile.exists()) {
                 try {
                     JSONObject root = new JSONObject();
                     root.put("categories", new JSONArray());
                     try (FileWriter writer = new FileWriter(menuFile)) {
                         writer.write(root.toString(2));
-                        System.out.println("Created empty placeholder: " + menuItemsPathString);
                     }
                 } catch (IOException | JSONException e) {
                     System.err.println("Could not create placeholder '" + menuItemsPathString + "': " + e.getMessage());
@@ -373,7 +501,7 @@ public class ManageInventoryView {
             tableView.setPlaceholder(new Label("No items in inventory. Add some!"));
         }
 
-        try (InputStream inputStream = Files.newInputStream(menuItemsPathObj)) { // Use Path object
+        try (InputStream inputStream = Files.newInputStream(menuItemsPathObj)) {
             String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                     .lines().collect(Collectors.joining("\n"));
 
@@ -394,7 +522,7 @@ public class ManageInventoryView {
                     menuItemsList.add(new DisplayMenuItem(
                             categoryName,
                             itemObj.getString("name"),
-                            itemObj.getString("imageName"), // This is just the filename
+                            itemObj.optString("imageName", ""), // Handle missing imageName gracefully
                             itemObj.getInt("price")
                     ));
                 }
@@ -417,7 +545,7 @@ public class ManageInventoryView {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
-            if (inventoryStage != null && inventoryStage.isShowing()) { // Check if stage is available
+            if (inventoryStage != null && inventoryStage.isShowing()) {
                 alert.initOwner(inventoryStage);
             }
             alert.showAndWait();
@@ -444,7 +572,7 @@ public class ManageInventoryView {
         public DisplayMenuItem(String category, String name, String imageName, int price) {
             this.category = category;
             this.name = name;
-            this.imageName = imageName; // Store just the filename
+            this.imageName = imageName;
             this.price = price;
         }
 

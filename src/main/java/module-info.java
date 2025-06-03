@@ -11,6 +11,8 @@ module com.example.ssicecreamsshop {
     requires org.kordamp.ikonli.fontawesome5;
     requires org.json;
     requires java.prefs;
+    requires org.apache.poi.poi;
+    requires org.apache.poi.ooxml;
 
     opens com.example.ssicecreamsshop to javafx.fxml;
     exports com.ssicecreamsshop;
