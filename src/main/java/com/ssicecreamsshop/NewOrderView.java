@@ -1,5 +1,6 @@
 package com.ssicecreamsshop;
 
+import com.ssicecreamsshop.config.ConfigManager; // Import ConfigManager
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,9 +12,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-
-// Required for JSON parsing. Ensure org.json.jar is in your classpath
-// or added as a dependency in your build tool (e.g., Maven, Gradle).
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,9 +21,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files; // For reading from file system
+import java.nio.file.Path;   // For Path object
+import java.nio.file.Paths;  // For Paths utility
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap; // Preserves category order
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,7 +34,6 @@ import java.util.stream.Collectors;
 
 public class NewOrderView {
 
-    // Inner class to represent a menu item
     private static class MenuItem {
         String name;
         String imageName; // e.g., "vanilla.png"
@@ -44,7 +44,6 @@ public class NewOrderView {
             this.imageName = imageName;
             this.price = price;
         }
-
         public String getName() { return name; }
         public String getImageName() { return imageName; }
         public int getPrice() { return price; }
@@ -52,46 +51,44 @@ public class NewOrderView {
 
     private static VBox cartBox;
     private static Label totalLabel;
-    private static VBox menuVBox; // Displays menu items (TitledPanes)
+    private static VBox menuVBox;
     private static TextField searchField;
-    private static Map<String, Integer> cartItems = new HashMap<>(); // Flavor Name (String) -> Quantity (Integer)
+    private static Map<String, Integer> cartItems = new HashMap<>();
 
-    // Data structures to hold loaded menu items
-    // Map: Category Name -> List of MenuItems in that category
     private static final Map<String, List<MenuItem>> categorizedMenuItems = new LinkedHashMap<>();
-    // Map: Flavor Name -> MenuItem object (for quick lookup of details)
     private static final Map<String, MenuItem> allMenuItems = new HashMap<>();
+    private static List<TitledPane> categoryPanesList = new ArrayList<>(); // Initialize here
 
-    // Store TitledPane references for expand/collapse all
-    private static List<TitledPane> categoryPanesList; // Renamed to avoid conflict
-
-    // Static initializer block to load menu items from JSON when the class is loaded
     static {
+        // Initial load can happen here, but ensure ConfigManager defaults are set if called very early
+        // AppLauncher now calls ConfigManager.ensureDefaultPathsExist() before any view is shown.
         loadMenuItemsFromJson();
     }
 
-    /**
-     * Loads menu items from the menu_items.json file.
-     * Populates categorizedMenuItems and allMenuItems.
-     */
-    private static void loadMenuItemsFromJson() {
-        String jsonFilePath = "/menu_items.json"; // Path within resources
-        try (InputStream inputStream = NewOrderView.class.getResourceAsStream(jsonFilePath)) {
-            if (inputStream == null) {
-                System.err.println("Cannot find " + jsonFilePath + ". Please ensure it's in the resources folder.");
-                showErrorDialog("Menu Configuration Error", "Could not load menu items (" + jsonFilePath + " not found). Please contact support.");
-                return;
-            }
+    // Make this public static so it can be called after config changes
+    public static void loadMenuItemsFromJson() {
+        String menuJsonPathString = ConfigManager.getMenuItemsJsonPath();
+        Path menuJsonPath = Paths.get(menuJsonPathString);
 
-            // Read the JSON file content
+        categorizedMenuItems.clear(); // Clear previous data
+        allMenuItems.clear();
+
+        if (!Files.exists(menuJsonPath)) {
+            System.err.println("Menu JSON file not found at configured path: " + menuJsonPathString);
+            showErrorDialog("Menu Configuration Error",
+                    "Menu file not found: " + menuJsonPathString +
+                            "\nPlease check Configuration or add items via Manage Inventory.");
+            // If UI is already built, refresh it to show empty state
+            if (menuVBox != null) refreshMenuView(); // Refresh to show empty/error state
+            return;
+        }
+
+        try (InputStream inputStream = Files.newInputStream(menuJsonPath)) { // Load from file system path
             String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                     .lines().collect(Collectors.joining("\n"));
 
             JSONObject jsonObject = new JSONObject(jsonText);
             JSONArray categoriesArray = jsonObject.getJSONArray("categories");
-
-            categorizedMenuItems.clear();
-            allMenuItems.clear();
 
             for (int i = 0; i < categoriesArray.length(); i++) {
                 JSONObject categoryObj = categoriesArray.getJSONObject(i);
@@ -107,42 +104,37 @@ public class NewOrderView {
 
                     MenuItem menuItem = new MenuItem(itemName, itemImageName, itemPrice);
                     itemList.add(menuItem);
-                    allMenuItems.put(itemName, menuItem); // For quick lookup by name
+                    allMenuItems.put(itemName, menuItem);
                 }
                 if (!itemList.isEmpty()) {
                     categorizedMenuItems.put(categoryName, itemList);
                 }
             }
         } catch (IOException e) {
-            System.err.println("Error reading " + jsonFilePath + ": " + e.getMessage());
-            showErrorDialog("File Read Error", "Error reading menu configuration: " + e.getMessage());
+            System.err.println("Error reading menu JSON from '" + menuJsonPathString + "': " + e.getMessage());
+            showErrorDialog("File Read Error", "Error reading menu configuration from '" + menuJsonPathString + "': " + e.getMessage());
         } catch (JSONException e) {
-            System.err.println("Error parsing " + jsonFilePath + ": " + e.getMessage());
-            showErrorDialog("JSON Parsing Error", "Error parsing menu configuration: " + e.getMessage() + ". Please check the JSON file format.");
+            System.err.println("Error parsing menu JSON from '" + menuJsonPathString + "': " + e.getMessage());
+            showErrorDialog("JSON Parsing Error", "Error parsing menu configuration from '" + menuJsonPathString + "': " + e.getMessage() + ". Please check the JSON file format.");
         } catch (Exception e) {
             System.err.println("An unexpected error occurred while loading menu items: " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for detailed debugging
+            e.printStackTrace();
             showErrorDialog("Unexpected Error", "An unexpected error occurred while loading menu items: " + e.getMessage());
         }
+        // If UI is already built, refresh it with new data
+        if (menuVBox != null) refreshMenuView();
     }
 
-    /**
-     * Displays an error dialog to the user.
-     * Ensures the dialog is shown on the JavaFX Application Thread.
-     * @param title Title of the error dialog.
-     * @param content Content message of the error dialog.
-     */
     private static void showErrorDialog(String title, String content) {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(content);
+            // Consider adding initOwner if a stage is readily available
             alert.showAndWait();
-            // Consider disabling UI elements or navigating away if the error is critical
         });
     }
-
 
     public static void show() {
         // --- Top Bar: Back Button, Control Buttons ---
@@ -160,7 +152,15 @@ public class NewOrderView {
         styleControlButton(collapseAllBtn);
         collapseAllBtn.setOnAction(e -> toggleAllCategoryPanes(false));
 
-        HBox controlButtons = new HBox(10, expandAllBtn, collapseAllBtn);
+        Button refreshMenuBtn = new Button("🔄 Refresh Menu"); // For manual refresh if needed
+        styleControlButton(refreshMenuBtn);
+        refreshMenuBtn.setOnAction(e -> {
+            loadMenuItemsFromJson(); // This will reload data
+            // populateMenu will be called by loadMenuItemsFromJson if UI is up
+        });
+
+
+        HBox controlButtons = new HBox(10, expandAllBtn, collapseAllBtn, refreshMenuBtn);
         controlButtons.setAlignment(Pos.CENTER_LEFT);
 
         HBox topBar = new HBox(30, backButton, controlButtons);
@@ -170,21 +170,24 @@ public class NewOrderView {
 
         // --- Left Section: Menu ---
         searchField = new TextField();
-        searchField.setPromptText("Search Ice Cream (Name or Price)..."); // Updated prompt
+        searchField.setPromptText("Search Ice Cream (Name or Price)...");
         searchField.setStyle("-fx-font-size: 14px; -fx-padding: 8px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
         searchField.setMaxWidth(Double.MAX_VALUE);
         searchField.textProperty().addListener((obs, oldVal, newVal) -> populateMenu(newVal));
 
-        menuVBox = new VBox(15);
+        menuVBox = new VBox(15); // Initialize menuVBox here
         menuVBox.setPadding(new Insets(20));
         menuVBox.setStyle("-fx-background-color: #f7fafc;");
-        populateMenu(""); // Initial population
 
-        ScrollPane menuScroll = new ScrollPane(menuVBox);
+        ScrollPane menuScroll = new ScrollPane(menuVBox); // menuVBox is now initialized
         menuScroll.setFitToWidth(true);
         menuScroll.setFitToHeight(true);
         menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        // Initial population of menu after UI elements are created
+        populateMenu("");
+
 
         // --- Right Section: Cart ---
         cartBox = new VBox(10);
@@ -256,7 +259,7 @@ public class NewOrderView {
         mainLayout.setStyle("-fx-background-color: #cbd5e1;");
 
         AppLauncher.setScreen(mainLayout);
-        refreshCart(); // Refresh cart display on initial show
+        refreshCart();
     }
 
     private static void styleControlButton(Button button) {
@@ -276,16 +279,21 @@ public class NewOrderView {
         button.setMinWidth(120);
     }
 
-    private static void populateMenu(String filter) {
+    // Renamed from populateMenu to avoid confusion, this is the UI update part
+    private static void updateMenuDisplay(String filter) {
+        if (menuVBox == null || searchField == null) { // Guard against null if called too early
+            System.err.println("Menu UI components not ready for display update.");
+            return;
+        }
         menuVBox.getChildren().clear();
-        menuVBox.getChildren().add(searchField);
-        categoryPanesList = new ArrayList<>();
+        menuVBox.getChildren().add(searchField); // Add search field back
+        categoryPanesList.clear(); // Clear old panes
 
-        if (categorizedMenuItems.isEmpty() && allMenuItems.isEmpty()) {
-            Label errorLabel = new Label("Menu items could not be loaded.\nPlease check the configuration or contact support.");
-            errorLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: red; -fx-padding: 20px;");
-            errorLabel.setAlignment(Pos.CENTER);
-            menuVBox.getChildren().add(errorLabel);
+        if (categorizedMenuItems.isEmpty()) {
+            Label infoLabel = new Label("No menu items loaded or available.\nCheck configuration or add items via Manage Inventory.");
+            infoLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #4a5568; -fx-padding: 20px; -fx-alignment: center;");
+            infoLabel.setWrapText(true);
+            menuVBox.getChildren().add(infoLabel);
             return;
         }
 
@@ -297,20 +305,14 @@ public class NewOrderView {
 
             List<MenuItem> filteredItems = itemsInCategory.stream()
                     .filter(item -> {
-                        if (lowerCaseFilter.isEmpty()) {
-                            return true; // No filter, show all items
-                        }
-                        // Check if name contains the filter
+                        if (lowerCaseFilter.isEmpty()) return true;
                         boolean nameMatches = item.getName().toLowerCase().contains(lowerCaseFilter);
-                        // Check if price (as string) contains the filter
                         boolean priceMatches = String.valueOf(item.getPrice()).contains(lowerCaseFilter);
                         return nameMatches || priceMatches;
                     })
                     .collect(Collectors.toList());
 
-            if (filteredItems.isEmpty() && !lowerCaseFilter.isEmpty()) {
-                continue; // Skip category if filter applied and no items match in this category
-            }
+            if (filteredItems.isEmpty() && !lowerCaseFilter.isEmpty()) continue;
 
             FlowPane itemsPane = new FlowPane(15, 15);
             itemsPane.setPadding(new Insets(15));
@@ -323,27 +325,65 @@ public class NewOrderView {
             if (!itemsPane.getChildren().isEmpty() || lowerCaseFilter.isEmpty()) {
                 TitledPane categoryPane = new TitledPane(categoryName + " (" + filteredItems.size() + ")", itemsPane);
                 categoryPane.setAnimated(true);
-                categoryPane.setExpanded(true); // Default to expanded, or based on filter
+                categoryPane.setExpanded(true);
                 categoryPane.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #334155;");
                 menuVBox.getChildren().add(categoryPane);
                 categoryPanesList.add(categoryPane);
             }
         }
+        if (menuVBox.getChildren().size() == 1 && !lowerCaseFilter.isEmpty()) { // Only search field present
+            Label noResultsLabel = new Label("No items match your search: '" + filter + "'");
+            noResultsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #4a5568; -fx-padding: 10px;");
+            menuVBox.getChildren().add(noResultsLabel);
+        }
     }
+
+    // This is the method that should be called by the search field listener
+    private static void populateMenu(String filter) {
+        updateMenuDisplay(filter);
+    }
+
+    // Public static method to allow external refresh of the menu UI
+    public static void refreshMenuView() {
+        if (menuVBox != null && searchField != null) {
+            // Data should have been reloaded by loadMenuItemsFromJson()
+            // Now, just update the display with the current filter
+            updateMenuDisplay(searchField.getText());
+        } else {
+            System.out.println("NewOrderView UI not fully initialized. Menu display will update when view is shown.");
+        }
+    }
+
 
     private static VBox createFlavorCard(MenuItem item) {
         ImageView imgView = new ImageView();
-        String imagePath = "/images/" + item.getImageName(); // Image path from MenuItem
+        String imageBasePath = ConfigManager.getImagePath(); // Get configured base path for images
+        Path imageFilePath = Paths.get(imageBasePath, item.getImageName()); // Construct full path
+
         try {
-            Image img = new Image(NewOrderView.class.getResourceAsStream(imagePath));
-            if (img.isError()) {
-                throw new NullPointerException("Image load error for " + imagePath + ": " + img.getException());
+            if (Files.exists(imageFilePath) && !Files.isDirectory(imageFilePath)) {
+                try (InputStream imageStream = Files.newInputStream(imageFilePath)) {
+                    Image img = new Image(imageStream);
+                    if (img.isError()) { // Check for internal image loading errors
+                        System.err.println("JavaFX Image error for " + imageFilePath + ": " + (img.getException() != null ? img.getException().getMessage() : "Unknown error"));
+                        imgView.setImage(null); // Explicitly set to null on error
+                    } else {
+                        imgView.setImage(img);
+                    }
+                }
+            } else {
+                System.err.println("Image file not found or is a directory: " + imageFilePath.toString());
+                imgView.setImage(null);
             }
-            imgView.setImage(img);
-        } catch (Exception e) {
-            System.err.println("Error loading image " + imagePath + " for " + item.getName() + ": " + e.getMessage());
-            imgView.setImage(null); // Important to set to null if error
+        } catch (IOException e) { // Catch IO errors from Files.newInputStream
+            System.err.println("IOException loading image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
+            imgView.setImage(null);
+        } catch (Exception e) { // Catch any other unexpected errors during image handling
+            System.err.println("Unexpected error loading image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
+            e.printStackTrace();
+            imgView.setImage(null);
         }
+
         imgView.setFitWidth(100);
         imgView.setFitHeight(100);
         imgView.setPreserveRatio(true);
@@ -364,7 +404,7 @@ public class NewOrderView {
         card.setStyle(baseCardStyle);
         card.setOnMouseEntered(e -> card.setStyle(hoverCardStyle));
         card.setOnMouseExited(e -> card.setStyle(baseCardStyle));
-        card.setOnMouseClicked(e -> addToCart(item.getName())); // Add by name
+        card.setOnMouseClicked(e -> addToCart(item.getName()));
         card.setMinWidth(150);
         card.setMaxWidth(150);
 
@@ -373,7 +413,7 @@ public class NewOrderView {
 
     private static Pane createPlaceholderGraphic(String text, double size) {
         Label placeholderText = new Label(text.length() > 0 ? text.substring(0, 1).toUpperCase() : "?");
-        placeholderText.setFont(Font.font("System", FontWeight.BOLD, size * 0.4)); // Scale font size
+        placeholderText.setFont(Font.font("System", FontWeight.BOLD, size * 0.4));
         placeholderText.setTextFill(Color.SLATEGRAY);
         StackPane placeholderPane = new StackPane(placeholderText);
         placeholderPane.setPrefSize(size, size);
@@ -387,7 +427,7 @@ public class NewOrderView {
     private static void addToCart(String itemName) {
         if (!allMenuItems.containsKey(itemName)) {
             System.err.println("Attempted to add unknown item to cart: " + itemName);
-            return; // Do not add if item is not recognized
+            return;
         }
         cartItems.put(itemName, cartItems.getOrDefault(itemName, 0) + 1);
         refreshCart();
@@ -410,9 +450,9 @@ public class NewOrderView {
         for (Map.Entry<String, Integer> entry : cartItems.entrySet()) {
             String itemName = entry.getKey();
             int quantity = entry.getValue();
-            MenuItem item = allMenuItems.get(itemName); // Get MenuItem from its name
+            MenuItem item = allMenuItems.get(itemName);
 
-            if (item == null) { // Should not happen if addToCart is robust
+            if (item == null) {
                 System.err.println("Item " + itemName + " not found in allMenuItems during cart refresh.");
                 continue;
             }
@@ -426,15 +466,29 @@ public class NewOrderView {
 
     private static HBox createCartItemBox(MenuItem item, int quantity, double subtotal) {
         ImageView imgView = new ImageView();
-        String imagePath = "/images/" + item.getImageName();
+        String imageBasePath = ConfigManager.getImagePath();
+        Path imageFilePath = Paths.get(imageBasePath, item.getImageName());
+
         try {
-            Image img = new Image(NewOrderView.class.getResourceAsStream(imagePath));
-            if (img.isError()) {
-                throw new NullPointerException("Image load error for " + imagePath + ": " + img.getException());
+            if (Files.exists(imageFilePath) && !Files.isDirectory(imageFilePath)) {
+                try (InputStream imageStream = Files.newInputStream(imageFilePath)) {
+                    Image img = new Image(imageStream);
+                    if (img.isError()) {
+                        System.err.println("JavaFX Image error for cart item " + imageFilePath + ": " + (img.getException() != null ? img.getException().getMessage() : "Unknown error"));
+                        imgView.setImage(null);
+                    } else {
+                        imgView.setImage(img);
+                    }
+                }
+            } else {
+                System.err.println("Cart image file not found or is directory: " + imageFilePath.toString());
+                imgView.setImage(null);
             }
-            imgView.setImage(img);
+        } catch (IOException e) {
+            System.err.println("IOException loading cart image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
+            imgView.setImage(null);
         } catch (Exception e) {
-            System.err.println("Error loading cart image " + imagePath + " for " + item.getName() + ": " + e.getMessage());
+            System.err.println("Unexpected error loading cart image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
             imgView.setImage(null);
         }
         imgView.setFitWidth(50);
