@@ -1,6 +1,7 @@
 package com.ssicecreamsshop;
 
-import com.ssicecreamsshop.config.ConfigManager; // Import ConfigManager
+import com.ssicecreamsshop.config.ConfigManager;
+import com.ssicecreamsshop.utils.NetworkStatusIndicator; // Import NetworkStatusIndicator
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,9 +22,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files; // For reading from file system
-import java.nio.file.Path;   // For Path object
-import java.nio.file.Paths;  // For Paths utility
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -36,7 +37,7 @@ public class NewOrderView {
 
     private static class MenuItem {
         String name;
-        String imageName; // e.g., "vanilla.png"
+        String imageName;
         int price;
 
         MenuItem(String name, String imageName, int price) {
@@ -57,20 +58,19 @@ public class NewOrderView {
 
     private static final Map<String, List<MenuItem>> categorizedMenuItems = new LinkedHashMap<>();
     private static final Map<String, MenuItem> allMenuItems = new HashMap<>();
-    private static List<TitledPane> categoryPanesList = new ArrayList<>(); // Initialize here
+    private static List<TitledPane> categoryPanesList = new ArrayList<>();
+
+    private static NetworkStatusIndicator networkIndicator; // Declare network indicator
 
     static {
-        // Initial load can happen here, but ensure ConfigManager defaults are set if called very early
-        // AppLauncher now calls ConfigManager.ensureDefaultPathsExist() before any view is shown.
         loadMenuItemsFromJson();
     }
 
-    // Make this public static so it can be called after config changes
     public static void loadMenuItemsFromJson() {
         String menuJsonPathString = ConfigManager.getMenuItemsJsonPath();
         Path menuJsonPath = Paths.get(menuJsonPathString);
 
-        categorizedMenuItems.clear(); // Clear previous data
+        categorizedMenuItems.clear();
         allMenuItems.clear();
 
         if (!Files.exists(menuJsonPath)) {
@@ -78,12 +78,11 @@ public class NewOrderView {
             showErrorDialog("Menu Configuration Error",
                     "Menu file not found: " + menuJsonPathString +
                             "\nPlease check Configuration or add items via Manage Inventory.");
-            // If UI is already built, refresh it to show empty state
-            if (menuVBox != null) refreshMenuView(); // Refresh to show empty/error state
+            if (menuVBox != null) refreshMenuView();
             return;
         }
 
-        try (InputStream inputStream = Files.newInputStream(menuJsonPath)) { // Load from file system path
+        try (InputStream inputStream = Files.newInputStream(menuJsonPath)) {
             String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                     .lines().collect(Collectors.joining("\n"));
 
@@ -121,7 +120,6 @@ public class NewOrderView {
             e.printStackTrace();
             showErrorDialog("Unexpected Error", "An unexpected error occurred while loading menu items: " + e.getMessage());
         }
-        // If UI is already built, refresh it with new data
         if (menuVBox != null) refreshMenuView();
     }
 
@@ -131,18 +129,27 @@ public class NewOrderView {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(content);
-            // Consider adding initOwner if a stage is readily available
             alert.showAndWait();
         });
     }
 
+
     public static void show() {
-        // --- Top Bar: Back Button, Control Buttons ---
+        // Instantiate or reuse network indicator
+        if (networkIndicator != null) {
+            networkIndicator.stopMonitoring(); // Stop previous if any
+        }
+        networkIndicator = new NetworkStatusIndicator();
+
+        // --- Top Bar: Back Button, Control Buttons, Network Indicator ---
         Button backButton = new Button("← Back to Home");
         backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;");
         backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #2d3748; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
         backButton.setOnMouseExited(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
-        backButton.setOnAction(e -> MainView.show());
+        backButton.setOnAction(e -> {
+            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
+            MainView.show();
+        });
 
         Button expandAllBtn = new Button("Expand All");
         styleControlButton(expandAllBtn);
@@ -152,18 +159,19 @@ public class NewOrderView {
         styleControlButton(collapseAllBtn);
         collapseAllBtn.setOnAction(e -> toggleAllCategoryPanes(false));
 
-        Button refreshMenuBtn = new Button("🔄 Refresh Menu"); // For manual refresh if needed
+        Button refreshMenuBtn = new Button("🔄 Refresh Menu");
         styleControlButton(refreshMenuBtn);
         refreshMenuBtn.setOnAction(e -> {
-            loadMenuItemsFromJson(); // This will reload data
-            // populateMenu will be called by loadMenuItemsFromJson if UI is up
+            loadMenuItemsFromJson();
         });
-
 
         HBox controlButtons = new HBox(10, expandAllBtn, collapseAllBtn, refreshMenuBtn);
         controlButtons.setAlignment(Pos.CENTER_LEFT);
 
-        HBox topBar = new HBox(30, backButton, controlButtons);
+        Region spacer = new Region(); // Spacer for top bar
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox topBar = new HBox(15, networkIndicator, backButton, controlButtons, spacer); // Added networkIndicator
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(20, 30, 15, 30));
         topBar.setStyle("-fx-background-color: #e2e8f0;");
@@ -175,17 +183,16 @@ public class NewOrderView {
         searchField.setMaxWidth(Double.MAX_VALUE);
         searchField.textProperty().addListener((obs, oldVal, newVal) -> populateMenu(newVal));
 
-        menuVBox = new VBox(15); // Initialize menuVBox here
+        menuVBox = new VBox(15);
         menuVBox.setPadding(new Insets(20));
         menuVBox.setStyle("-fx-background-color: #f7fafc;");
 
-        ScrollPane menuScroll = new ScrollPane(menuVBox); // menuVBox is now initialized
+        ScrollPane menuScroll = new ScrollPane(menuVBox);
         menuScroll.setFitToWidth(true);
         menuScroll.setFitToHeight(true);
         menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
-        // Initial population of menu after UI elements are created
         populateMenu("");
 
 
@@ -234,6 +241,7 @@ public class NewOrderView {
             alert.showAndWait();
             cartItems.clear();
             refreshCart();
+            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
             MainView.show();
         });
 
@@ -279,15 +287,14 @@ public class NewOrderView {
         button.setMinWidth(120);
     }
 
-    // Renamed from populateMenu to avoid confusion, this is the UI update part
     private static void updateMenuDisplay(String filter) {
-        if (menuVBox == null || searchField == null) { // Guard against null if called too early
+        if (menuVBox == null || searchField == null) {
             System.err.println("Menu UI components not ready for display update.");
             return;
         }
         menuVBox.getChildren().clear();
-        menuVBox.getChildren().add(searchField); // Add search field back
-        categoryPanesList.clear(); // Clear old panes
+        menuVBox.getChildren().add(searchField);
+        categoryPanesList.clear();
 
         if (categorizedMenuItems.isEmpty()) {
             Label infoLabel = new Label("No menu items loaded or available.\nCheck configuration or add items via Manage Inventory.");
@@ -331,23 +338,19 @@ public class NewOrderView {
                 categoryPanesList.add(categoryPane);
             }
         }
-        if (menuVBox.getChildren().size() == 1 && !lowerCaseFilter.isEmpty()) { // Only search field present
+        if (menuVBox.getChildren().size() == 1 && !lowerCaseFilter.isEmpty()) {
             Label noResultsLabel = new Label("No items match your search: '" + filter + "'");
             noResultsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #4a5568; -fx-padding: 10px;");
             menuVBox.getChildren().add(noResultsLabel);
         }
     }
 
-    // This is the method that should be called by the search field listener
     private static void populateMenu(String filter) {
         updateMenuDisplay(filter);
     }
 
-    // Public static method to allow external refresh of the menu UI
     public static void refreshMenuView() {
         if (menuVBox != null && searchField != null) {
-            // Data should have been reloaded by loadMenuItemsFromJson()
-            // Now, just update the display with the current filter
             updateMenuDisplay(searchField.getText());
         } else {
             System.out.println("NewOrderView UI not fully initialized. Menu display will update when view is shown.");
@@ -357,16 +360,16 @@ public class NewOrderView {
 
     private static VBox createFlavorCard(MenuItem item) {
         ImageView imgView = new ImageView();
-        String imageBasePath = ConfigManager.getImagePath(); // Get configured base path for images
-        Path imageFilePath = Paths.get(imageBasePath, item.getImageName()); // Construct full path
+        String imageBasePath = ConfigManager.getImagePath();
+        Path imageFilePath = Paths.get(imageBasePath, item.getImageName());
 
         try {
             if (Files.exists(imageFilePath) && !Files.isDirectory(imageFilePath)) {
                 try (InputStream imageStream = Files.newInputStream(imageFilePath)) {
                     Image img = new Image(imageStream);
-                    if (img.isError()) { // Check for internal image loading errors
+                    if (img.isError()) {
                         System.err.println("JavaFX Image error for " + imageFilePath + ": " + (img.getException() != null ? img.getException().getMessage() : "Unknown error"));
-                        imgView.setImage(null); // Explicitly set to null on error
+                        imgView.setImage(null);
                     } else {
                         imgView.setImage(img);
                     }
@@ -375,10 +378,10 @@ public class NewOrderView {
                 System.err.println("Image file not found or is a directory: " + imageFilePath.toString());
                 imgView.setImage(null);
             }
-        } catch (IOException e) { // Catch IO errors from Files.newInputStream
+        } catch (IOException e) {
             System.err.println("IOException loading image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
             imgView.setImage(null);
-        } catch (Exception e) { // Catch any other unexpected errors during image handling
+        } catch (Exception e) {
             System.err.println("Unexpected error loading image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
             e.printStackTrace();
             imgView.setImage(null);
@@ -554,6 +557,13 @@ public class NewOrderView {
             for (TitledPane pane : categoryPanesList) {
                 pane.setExpanded(expand);
             }
+        }
+    }
+    // Method to explicitly stop monitoring if NewOrderView is being replaced
+    public static void stopNetworkIndicator() {
+        if (networkIndicator != null) {
+            networkIndicator.stopMonitoring();
+            networkIndicator = null; // Allow garbage collection
         }
     }
 }

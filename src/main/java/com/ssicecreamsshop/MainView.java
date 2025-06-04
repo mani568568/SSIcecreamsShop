@@ -1,7 +1,9 @@
 package com.ssicecreamsshop;
 
 import com.ssicecreamsshop.config.ConfigurationDialog;
-// import com.ssicecreamsshop.utils.ExcelExportUtil; // Removed as export is no longer here
+import com.ssicecreamsshop.utils.ExcelExportUtil;
+import com.ssicecreamsshop.utils.NetworkStatusIndicator; // Import NetworkStatusIndicator
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -13,11 +15,23 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-// import javafx.stage.Stage; // No longer needed here for export
+import javafx.stage.Stage;
 
 public class MainView {
 
+    private static NetworkStatusIndicator networkIndicator; // Declare network indicator
+
     public static void show() {
+        // Instantiate the network indicator
+        // It's important to manage its lifecycle, especially the stopMonitoring() method.
+        // If MainView can be hidden and reshown, this might need to be a singleton or managed by AppLauncher.
+        // For now, we create a new one each time MainView.show() is called.
+        // If an old one exists, try to stop it.
+        if (networkIndicator != null) {
+            networkIndicator.stopMonitoring();
+        }
+        networkIndicator = new NetworkStatusIndicator();
+
         // Title Label
         Label title = new Label("Ice Cream Shop");
         title.setStyle("-fx-font-size: 54px; -fx-text-fill: #1f2937; -fx-font-weight: bold;");
@@ -31,19 +45,13 @@ public class MainView {
         configButton.setOnMouseExited(e -> configButton.setStyle(configButtonStyle));
         configButton.setOnAction(e -> ConfigurationDialog.show());
 
-        // --- Excel Export Button (REMOVED) ---
-        // Button excelExportButton = new Button("📤 Export to Excel");
-        // ... (styling and action for export button removed)
-
-
         // HBox for top controls
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        // Removed excelExportButton from here. Only configButton remains on the right.
-        // If you want other buttons on the left, they would go before the spacer.
-        // For now, let's assume only config button is desired at the top right.
-        HBox topControlsBox = new HBox(spacer, configButton);
-        topControlsBox.setAlignment(Pos.CENTER_RIGHT); // Aligns the HBox content (spacer pushes config to right)
+
+        // Add network indicator to the left of the spacer
+        HBox topControlsBox = new HBox(15, networkIndicator, spacer, configButton);
+        topControlsBox.setAlignment(Pos.CENTER_LEFT); // Align items to left, spacer will push configButton to right
         topControlsBox.setPadding(new Insets(0, 0, 20, 0));
 
 
@@ -75,7 +83,10 @@ public class MainView {
         orderCard.setStyle("-fx-background-color: #1e3a8a; -fx-background-radius: 36px; -fx-padding: 80px;");
         orderCard.setOnMouseEntered(e -> orderCard.setStyle("-fx-background-color: #1c3276; -fx-background-radius: 36px; -fx-padding: 80px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0.5, 0, 0);"));
         orderCard.setOnMouseExited(e -> orderCard.setStyle("-fx-background-color: #1e3a8a; -fx-background-radius: 36px; -fx-padding: 80px;"));
-        orderCard.setOnMouseClicked(e -> NewOrderView.show());
+        orderCard.setOnMouseClicked(e -> {
+            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
+            NewOrderView.show();
+        });
 
         // Clipboard Icon for Inventory Card
         ImageView clipboardIcon = null;
@@ -104,7 +115,10 @@ public class MainView {
         inventoryCard.setStyle("-fx-background-color: #0ea5e9; -fx-background-radius: 36px; -fx-padding: 80px;");
         inventoryCard.setOnMouseEntered(e -> inventoryCard.setStyle("-fx-background-color: #0d94d2; -fx-background-radius: 36px; -fx-padding: 80px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0.5, 0, 0);"));
         inventoryCard.setOnMouseExited(e -> inventoryCard.setStyle("-fx-background-color: #0ea5e9; -fx-background-radius: 36px; -fx-padding: 80px;"));
-        inventoryCard.setOnMouseClicked(e -> ManageInventoryView.show());
+        inventoryCard.setOnMouseClicked(e -> {
+            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
+            ManageInventoryView.show();
+        });
 
 
         // Row for Cards
@@ -120,5 +134,14 @@ public class MainView {
         StackPane rootPane = new StackPane(root);
         StackPane.setAlignment(root, Pos.CENTER);
         AppLauncher.setScreen(rootPane);
+    }
+
+    // Method to explicitly stop monitoring if MainView is being replaced by AppLauncher directly
+    // This might be needed if AppLauncher switches views without MainView's click handlers being involved.
+    public static void stopNetworkIndicator() {
+        if (networkIndicator != null) {
+            networkIndicator.stopMonitoring();
+            networkIndicator = null; // Allow garbage collection
+        }
     }
 }
