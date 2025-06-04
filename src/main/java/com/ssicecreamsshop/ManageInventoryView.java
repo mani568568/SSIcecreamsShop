@@ -1,17 +1,21 @@
 package com.ssicecreamsshop;
 
 import com.ssicecreamsshop.config.ConfigManager;
-import com.ssicecreamsshop.utils.ExcelExportUtil; // For export functionality
-import com.ssicecreamsshop.utils.ExcelImportDialog; // For import functionality
+import com.ssicecreamsshop.utils.ExcelExportUtil;
+import com.ssicecreamsshop.utils.ExcelImportDialog;
+import com.ssicecreamsshop.utils.NetworkStatusIndicator; // Added import
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -32,6 +36,23 @@ import java.util.stream.Collectors;
 
 public class ManageInventoryView {
 
+    // Theme Colors
+    private static final String PRIMARY_RED = "#E53935";
+    private static final String PRIMARY_RED_DARK = "#C62828";
+    private static final String PRIMARY_RED_LIGHT = "#FFCDD2";
+    private static final String ACCENT_RED = "#D32F2F";
+    private static final String TEXT_ON_RED = "white";
+    private static final String TEXT_ON_WHITE = "#212121";
+    private static final String BORDER_COLOR_LIGHT = "#FFAB91";
+    private static final String BACKGROUND_LIGHT_NEUTRAL = "#fce4ec";
+    private static final String BACKGROUND_FORM = "#ffebee"; // Slightly darker than light neutral for form
+    private static final String SHADOW_COLOR = "rgba(0,0,0,0.15)";
+    private static final String BUTTON_GREEN = "#4CAF50";
+    private static final String BUTTON_GREEN_HOVER = "#388E3C";
+    private static final String BUTTON_BLUE = "#2196F3";
+    private static final String BUTTON_BLUE_HOVER = "#1976D2";
+
+
     private static TableView<DisplayMenuItem> tableView;
     private static final ObservableList<DisplayMenuItem> menuItemsList = FXCollections.observableArrayList();
     private static File selectedImageFile;
@@ -42,32 +63,42 @@ public class ManageInventoryView {
     private static TextField itemNameField;
     private static TextField itemPriceField;
     private static Stage inventoryStage;
+    private static NetworkStatusIndicator networkIndicator; // Added
 
 
     public static void show() {
         inventoryStage = new Stage();
         inventoryStage.initModality(Modality.APPLICATION_MODAL);
         inventoryStage.setTitle("🍦 Manage Inventory");
-        inventoryStage.setMinWidth(900); // Increased width for delete column
-        inventoryStage.setMinHeight(700);
+        inventoryStage.setMinWidth(950);
+        inventoryStage.setMinHeight(750);
+
+        if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop if existing
+        networkIndicator = new NetworkStatusIndicator();
 
 
         // --- Input Form ---
         GridPane formPane = new GridPane();
-        formPane.setHgap(10);
-        formPane.setVgap(12);
-        formPane.setPadding(new Insets(25));
-        formPane.setStyle("-fx-background-color: #eef2f9;");
+        formPane.setHgap(15); // Increased gap
+        formPane.setVgap(15); // Increased gap
+        formPane.setPadding(new Insets(30)); // Increased padding
+        formPane.setStyle("-fx-background-color: " + BACKGROUND_FORM + "; -fx-background-radius: 10px;");
+        formPane.setEffect(new DropShadow(10, Color.web(SHADOW_COLOR)));
 
-        formPane.add(new Label("Item Name:"), 0, 0);
+        String labelStyle = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_RED_DARK + ";";
+        String textFieldStyle = "-fx-font-size: 14px; -fx-background-radius: 15px; -fx-border-radius: 15px; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-padding: 7px;";
+
+        formPane.add(new Label("Item Name:") {{ setStyle(labelStyle); }}, 0, 0);
         itemNameField = new TextField();
         itemNameField.setPromptText("e.g., Classic Vanilla");
+        itemNameField.setStyle(textFieldStyle);
         formPane.add(itemNameField, 1, 0);
         GridPane.setHgrow(itemNameField, Priority.ALWAYS);
 
-        formPane.add(new Label("Item Price (₹):"), 0, 1);
+        formPane.add(new Label("Item Price (₹):") {{ setStyle(labelStyle); }}, 0, 1);
         itemPriceField = new TextField();
         itemPriceField.setPromptText("e.g., 150");
+        itemPriceField.setStyle(textFieldStyle);
         formPane.add(itemPriceField, 1, 1);
         itemPriceField.textProperty().addListener((observable, oldValue, newValue) -> {
             if (!newValue.matches("\\d*")) {
@@ -75,17 +106,19 @@ public class ManageInventoryView {
             }
         });
 
-        formPane.add(new Label("Category:"), 0, 2);
+        formPane.add(new Label("Category:") {{ setStyle(labelStyle); }}, 0, 2);
         categoryComboBox = new ComboBox<>(categoriesList);
         categoryComboBox.setEditable(true);
         categoryComboBox.setPromptText("Select or type new category");
+        categoryComboBox.setStyle(textFieldStyle + "-fx-background-color: white;"); // Ensure combobox background is white
         categoryComboBox.setMaxWidth(Double.MAX_VALUE);
         formPane.add(categoryComboBox, 1, 2);
 
-        formPane.add(new Label("Item Image:"), 0, 3);
+        formPane.add(new Label("Item Image:") {{ setStyle(labelStyle); }}, 0, 3);
         Button browseButton = new Button("Browse...");
-        browseButton.setStyle("-fx-background-color: #5c67f2; -fx-text-fill: white;");
+        styleDialogButton(browseButton, BUTTON_BLUE, BUTTON_BLUE_HOVER); // Themed browse button
         selectedImageLabel = new Label("No image selected");
+        selectedImageLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #555;");
         selectedImageLabel.setWrapText(true);
         HBox imageSelectionBox = new HBox(10, browseButton, selectedImageLabel);
         imageSelectionBox.setAlignment(Pos.CENTER_LEFT);
@@ -110,109 +143,128 @@ public class ManageInventoryView {
         });
 
         Button addItemButton = new Button("➕ Add Item to Inventory");
-        addItemButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15;");
+        styleDialogButton(addItemButton, BUTTON_GREEN, BUTTON_GREEN_HOVER); // Themed add button
         addItemButton.setMaxWidth(Double.MAX_VALUE);
         addItemButton.setOnAction(e -> handleAddItem());
-        formPane.add(addItemButton, 1, 4);
+        formPane.add(addItemButton, 0, 4, 2, 1); // Span 2 columns
+        GridPane.setHalignment(addItemButton, HPos.CENTER);
 
 
         // --- Table View for Displaying Items ---
         tableView = new TableView<>();
+        tableView.setStyle("-fx-font-size: 13px; -fx-selection-bar: " + PRIMARY_RED_LIGHT + "; -fx-selection-bar-text: " + PRIMARY_RED_DARK + ";");
+        tableView.setEffect(new DropShadow(5, Color.web(SHADOW_COLOR)));
+
         TableColumn<DisplayMenuItem, String> categoryCol = new TableColumn<>("Category");
         categoryCol.setCellValueFactory(new PropertyValueFactory<>("category"));
-        categoryCol.setPrefWidth(150);
+        categoryCol.setPrefWidth(160);
+        categoryCol.setStyle("-fx-alignment: CENTER_LEFT; -fx-padding: 6px;");
 
         TableColumn<DisplayMenuItem, String> nameCol = new TableColumn<>("Item Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
-        nameCol.setPrefWidth(200);
+        nameCol.setPrefWidth(220);
+        nameCol.setStyle("-fx-alignment: CENTER_LEFT; -fx-padding: 6px;");
 
         TableColumn<DisplayMenuItem, String> imageCol = new TableColumn<>("Image File");
         imageCol.setCellValueFactory(new PropertyValueFactory<>("imageName"));
-        imageCol.setPrefWidth(150);
+        imageCol.setPrefWidth(160);
+        imageCol.setStyle("-fx-alignment: CENTER_LEFT; -fx-padding: 6px;");
 
         TableColumn<DisplayMenuItem, Integer> priceCol = new TableColumn<>("Price (₹)");
         priceCol.setCellValueFactory(new PropertyValueFactory<>("price"));
-        priceCol.setPrefWidth(100);
-        priceCol.setStyle("-fx-alignment: CENTER_RIGHT;");
+        priceCol.setPrefWidth(110);
+        priceCol.setStyle("-fx-alignment: CENTER_RIGHT; -fx-font-weight: bold; -fx-padding: 6px;");
 
-        // --- Delete Action Column ---
         TableColumn<DisplayMenuItem, Void> deleteCol = new TableColumn<>("Actions");
-        deleteCol.setPrefWidth(120); // Adjusted width
+        deleteCol.setPrefWidth(100);
+        deleteCol.setSortable(false);
         deleteCol.setCellFactory(param -> new TableCell<>() {
-            private final Button deleteButton = new Button("Delete");
+            private final Button deleteButton = new Button("Delete 🗑️");
             {
-                deleteButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 10px; -fx-padding: 3 7;");
+                deleteButton.setStyle("-fx-background-color: " + ACCENT_RED + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 5 8; -fx-background-radius: 15px; -fx-font-weight: bold;");
+                deleteButton.setOnMouseEntered(e -> deleteButton.setStyle("-fx-background-color: " + PRIMARY_RED_DARK + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 5 8; -fx-background-radius: 15px; -fx-font-weight: bold;"));
+                deleteButton.setOnMouseExited(e -> deleteButton.setStyle("-fx-background-color: " + ACCENT_RED + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-padding: 5 8; -fx-background-radius: 15px; -fx-font-weight: bold;"));
                 deleteButton.setOnAction(event -> {
                     DisplayMenuItem item = getTableView().getItems().get(getIndex());
                     handleDeleteItem(item);
                 });
             }
-
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(deleteButton);
-                    setAlignment(Pos.CENTER);
-                }
+                setGraphic(empty ? null : deleteButton);
+                setAlignment(Pos.CENTER);
+                setPadding(new Insets(3));
             }
         });
 
-        tableView.getColumns().addAll(categoryCol, nameCol, imageCol, priceCol, deleteCol); // Added deleteCol
+        tableView.getColumns().addAll(categoryCol, nameCol, imageCol, priceCol, deleteCol);
         tableView.setItems(menuItemsList);
-        tableView.setPlaceholder(new Label("Loading inventory... or inventory file not found."));
+        tableView.setPlaceholder(new Label("No items in inventory. Add some goodies! 🍨"));
 
-        // --- Control Buttons for Table (Refresh, Export, Import) ---
-        Button refreshButton = new Button("🔄 Refresh View");
-        refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;");
-        String refreshButtonHoverStyle = "-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
-        refreshButton.setOnMouseEntered(e -> refreshButton.setStyle(refreshButtonHoverStyle));
-        refreshButton.setOnMouseExited(e -> refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"));
+        // --- Control Buttons for Table ---
+        Button refreshButton = new Button("🔄 Refresh");
+        styleTableControlButton(refreshButton, BUTTON_BLUE, BUTTON_BLUE_HOVER);
         refreshButton.setOnAction(e -> loadInventoryData());
 
-        Button exportButton = new Button("📤 Export to Excel");
-        String exportButtonStyle = "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"; // Green color
-        String exportButtonHoverStyle = "-fx-background-color: #229954; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
-        exportButton.setStyle(exportButtonStyle);
-        exportButton.setOnMouseEntered(e -> exportButton.setStyle(exportButtonHoverStyle));
-        exportButton.setOnMouseExited(e -> exportButton.setStyle(exportButtonStyle));
+        Button exportButton = new Button("📤 Export");
+        styleTableControlButton(exportButton, BUTTON_GREEN, BUTTON_GREEN_HOVER);
         exportButton.setOnAction(e -> ExcelExportUtil.exportToExcel(inventoryStage));
 
-        Button importButton = new Button("📥 Import from Excel");
-        // Consistent styling for import button
-        String importButtonStyle = "-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
-        String importButtonHoverStyle = "-fx-background-color: #a93226; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
-        importButton.setStyle(importButtonStyle);
-        importButton.setOnMouseEntered(e -> importButton.setStyle(importButtonHoverStyle));
-        importButton.setOnMouseExited(e -> importButton.setStyle(importButtonStyle));
+        Button importButton = new Button("📥 Import");
+        styleTableControlButton(importButton, PRIMARY_RED, PRIMARY_RED_DARK);
         importButton.setOnAction(e -> ExcelImportDialog.show());
 
+        Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox tableControlsBox = new HBox(10, networkIndicator, spacer, refreshButton, exportButton, importButton);
+        tableControlsBox.setAlignment(Pos.CENTER_LEFT);
+        tableControlsBox.setPadding(new Insets(10,0,10,0));
 
-        HBox tableControlsBox = new HBox(10, refreshButton, exportButton, importButton); // Added importButton
-        tableControlsBox.setAlignment(Pos.CENTER_RIGHT);
-        tableControlsBox.setPadding(new Insets(0,0,10,0));
 
-
-        Label currentInventoryLabel = new Label("Current Inventory:");
-        currentInventoryLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #333;");
-        VBox bottomPane = new VBox(10, new Separator(), currentInventoryLabel, tableControlsBox, tableView);
-        bottomPane.setPadding(new Insets(10, 25, 25, 25));
+        Label currentInventoryLabel = new Label("Current Inventory Stock:");
+        currentInventoryLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_RED_DARK + "; -fx-padding: 10 0;");
+        VBox bottomPane = new VBox(15, new Separator(), currentInventoryLabel, tableControlsBox, tableView); // Increased spacing
+        bottomPane.setPadding(new Insets(20, 25, 25, 25)); // Increased padding
         VBox.setVgrow(tableView, Priority.ALWAYS);
-        bottomPane.setStyle("-fx-background-color: #ffffff;");
+        bottomPane.setStyle("-fx-background-color: white;");
 
         BorderPane rootLayout = new BorderPane();
         rootLayout.setTop(formPane);
         rootLayout.setCenter(bottomPane);
+        rootLayout.setStyle("-fx-background-color: " + BACKGROUND_LIGHT_NEUTRAL + ";"); // Overall background
+        BorderPane.setMargin(formPane, new Insets(20));
 
-        Scene scene = new Scene(rootLayout); // Width and height will be set by stage.setMinWidth/Height
+
+        Scene scene = new Scene(rootLayout);
         inventoryStage.setScene(scene);
+        inventoryStage.setOnHidden(event -> {
+            if (networkIndicator != null) {
+                networkIndicator.stopMonitoring();
+            }
+        });
 
         loadInventoryData();
-
         inventoryStage.showAndWait();
     }
+
+    private static void styleDialogButton(Button button, String baseColor, String hoverColor) {
+        String style = "-fx-font-size: 14px; -fx-text-fill: " + TEXT_ON_RED + "; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 20px;";
+        button.setStyle(style + "-fx-background-color: " + baseColor + ";");
+        button.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(style + "-fx-background-color: " + hoverColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 7, 0.2, 0, 1);"));
+        button.setOnMouseExited(e -> button.setStyle(style + "-fx-background-color: " + baseColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 3, 0, 0, 0);"));
+    }
+
+    private static void styleTableControlButton(Button button, String baseColor, String hoverColor) {
+        String style = "-fx-font-size: 13px; -fx-text-fill: " + TEXT_ON_RED + "; -fx-font-weight: bold; -fx-padding: 7 15; -fx-background-radius: 18px;";
+        button.setStyle(style + "-fx-background-color: " + baseColor + ";");
+        button.setEffect(new DropShadow(2, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(style + "-fx-background-color: " + hoverColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 5, 0.15, 0, 1);"));
+        button.setOnMouseExited(e -> button.setStyle(style + "-fx-background-color: " + baseColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 2, 0, 0, 0);"));
+    }
+
+    // --- handleAddItem, handleDeleteItem, removeItemFromJson, addItemToJson, loadInventoryData methods remain largely the same ---
+    // --- Only showAlert and showAlertWithConfirmation need theming updates ---
 
     private static void handleAddItem() {
         String itemName = itemNameField.getText().trim();
@@ -276,7 +328,6 @@ public class ManageInventoryView {
     }
 
     private static void handleDeleteItem(DisplayMenuItem itemToDelete) {
-        // Modified confirmation message to reflect that the image file will NOT be deleted.
         Optional<ButtonType> result = showAlertWithConfirmation("Confirm Delete",
                 "Are you sure you want to delete the item '" + itemToDelete.getName() + "' from category '" + itemToDelete.getCategory() + "'?\n" +
                         "The item record will be removed from the inventory. The image file itself will NOT be deleted from the disk.");
@@ -284,13 +335,9 @@ public class ManageInventoryView {
         if (result.isPresent() && result.get() == ButtonType.OK) {
             boolean jsonUpdated = removeItemFromJson(itemToDelete);
             if (jsonUpdated) {
-                // The section for deleting the image file has been REMOVED.
-                // System.out.println("Image file '" + itemToDelete.getImageName() + "' will NOT be deleted from the disk as per new requirement.");
-
-                loadInventoryData(); // Refresh this view's table
-                NewOrderView.loadMenuItemsFromJson(); // Refresh data in NewOrderView
-                NewOrderView.refreshMenuView();       // Refresh NewOrderView's UI
-
+                loadInventoryData();
+                NewOrderView.loadMenuItemsFromJson();
+                NewOrderView.refreshMenuView();
                 showAlert(Alert.AlertType.INFORMATION, "Delete Successful", "Item '" + itemToDelete.getName() + "' has been removed from the inventory records.");
             } else {
                 showAlert(Alert.AlertType.ERROR, "Delete Failed", "Could not delete item '" + itemToDelete.getName() + "' from the inventory file.");
@@ -313,7 +360,7 @@ public class ManageInventoryView {
             String content = new String(Files.readAllBytes(menuFile.toPath()), StandardCharsets.UTF_8);
             rootJson = new JSONObject(content);
             JSONArray categoriesArray = rootJson.getJSONArray("categories");
-            JSONArray updatedCategoriesArray = new JSONArray(); // To build a new array without modification issues
+            JSONArray updatedCategoriesArray = new JSONArray();
 
             for (int i = 0; i < categoriesArray.length(); i++) {
                 JSONObject categoryObj = categoriesArray.getJSONObject(i);
@@ -325,28 +372,26 @@ public class ManageInventoryView {
                     for (int j = 0; j < itemsArray.length(); j++) {
                         JSONObject itemObj = itemsArray.getJSONObject(j);
                         if (itemObj.getString("name").equalsIgnoreCase(itemToDelete.getName())) {
-                            itemRemoved = true; // Mark as removed
+                            itemRemoved = true;
                             itemFoundInCategory = true;
                             System.out.println("Removing item '" + itemToDelete.getName() + "' from category '" + itemToDelete.getCategory() + "' in JSON.");
                         } else {
-                            updatedItemsArray.put(itemObj); // Keep other items
+                            updatedItemsArray.put(itemObj);
                         }
                     }
-                    // If items remain in category, or if it wasn't the target item's category
                     if (updatedItemsArray.length() > 0) {
                         categoryObj.put("items", updatedItemsArray);
                         updatedCategoriesArray.put(categoryObj);
                     } else if (!itemFoundInCategory) {
-                        // Category was not the one we modified, or it was already empty but not the target. Keep it.
                         updatedCategoriesArray.put(categoryObj);
                     } else {
                         System.out.println("Category '" + itemToDelete.getCategory() + "' is now empty after item deletion and will be removed from JSON.");
                     }
                 } else {
-                    updatedCategoriesArray.put(categoryObj); // Keep other categories
+                    updatedCategoriesArray.put(categoryObj);
                 }
             }
-            rootJson.put("categories", updatedCategoriesArray); // Replace with the potentially modified array
+            rootJson.put("categories", updatedCategoriesArray);
 
             if (itemRemoved) {
                 try (FileWriter writer = new FileWriter(menuFile)) {
@@ -454,7 +499,6 @@ public class ManageInventoryView {
 
         File menuFile = menuItemsPathObj.toFile();
 
-        // Ensure parent directory for JSON file exists
         if (menuItemsPathObj.getParent() != null && !Files.exists(menuItemsPathObj.getParent())) {
             try {
                 Files.createDirectories(menuItemsPathObj.getParent());
@@ -509,7 +553,7 @@ public class ManageInventoryView {
                     menuItemsList.add(new DisplayMenuItem(
                             categoryName,
                             itemObj.getString("name"),
-                            itemObj.optString("imageName", ""), // Handle missing imageName gracefully
+                            itemObj.optString("imageName", ""),
                             itemObj.getInt("price")
                     ));
                 }
@@ -532,6 +576,18 @@ public class ManageInventoryView {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
+            DialogPane dialogPane = alert.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_LIGHT_NEUTRAL +";");
+            // Generic button styling for alerts
+            dialogPane.lookupAll(".button").forEach(node -> {
+                if (node instanceof Button) {
+                    Button button = (Button) node;
+                    button.setStyle("-fx-background-color: " + PRIMARY_RED + "; -fx-text-fill: " + TEXT_ON_RED + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
+                    button.setOnMouseEntered(e -> button.setStyle("-fx-background-color: " + PRIMARY_RED_DARK + "; -fx-text-fill: " + TEXT_ON_RED + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+                    button.setOnMouseExited(e -> button.setStyle("-fx-background-color: " + PRIMARY_RED + "; -fx-text-fill: " + TEXT_ON_RED + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+                }
+            });
+
             if (inventoryStage != null && inventoryStage.isShowing()) {
                 alert.initOwner(inventoryStage);
             }
@@ -544,6 +600,23 @@ public class ManageInventoryView {
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);
+        DialogPane dialogPane = alert.getDialogPane();
+        dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_LIGHT_NEUTRAL +";");
+
+        Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+        if (okButton != null) {
+            okButton.setStyle("-fx-background-color: " + BUTTON_GREEN + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
+            okButton.setOnMouseEntered(e -> okButton.setStyle("-fx-background-color: " + BUTTON_GREEN_HOVER + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+            okButton.setOnMouseExited(e -> okButton.setStyle("-fx-background-color: " + BUTTON_GREEN + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+        }
+        Button cancelButton = (Button) dialogPane.lookupButton(ButtonType.CANCEL);
+        if (cancelButton != null) {
+            cancelButton.setStyle("-fx-background-color: " + ACCENT_RED + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
+            cancelButton.setOnMouseEntered(e -> cancelButton.setStyle("-fx-background-color: " + PRIMARY_RED_DARK + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+            cancelButton.setOnMouseExited(e -> cancelButton.setStyle("-fx-background-color: " + ACCENT_RED + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
+        }
+
+
         if (inventoryStage != null && inventoryStage.isShowing()) {
             alert.initOwner(inventoryStage);
         }

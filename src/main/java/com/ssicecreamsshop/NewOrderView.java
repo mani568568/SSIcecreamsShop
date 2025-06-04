@@ -1,7 +1,10 @@
 package com.ssicecreamsshop;
 
 import com.ssicecreamsshop.config.ConfigManager;
-import com.ssicecreamsshop.utils.NetworkStatusIndicator; // Import NetworkStatusIndicator
+import com.ssicecreamsshop.model.Order;
+import com.ssicecreamsshop.model.OrderItem;
+import com.ssicecreamsshop.utils.NetworkStatusIndicator;
+import com.ssicecreamsshop.utils.OrderExcelUtil;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -35,6 +38,7 @@ import java.util.stream.Collectors;
 
 public class NewOrderView {
 
+    // MenuItem inner class remains the same
     private static class MenuItem {
         String name;
         String imageName;
@@ -60,7 +64,7 @@ public class NewOrderView {
     private static final Map<String, MenuItem> allMenuItems = new HashMap<>();
     private static List<TitledPane> categoryPanesList = new ArrayList<>();
 
-    private static NetworkStatusIndicator networkIndicator; // Declare network indicator
+    private static NetworkStatusIndicator networkIndicator;
 
     static {
         loadMenuItemsFromJson();
@@ -135,19 +139,17 @@ public class NewOrderView {
 
 
     public static void show() {
-        // Instantiate or reuse network indicator
         if (networkIndicator != null) {
-            networkIndicator.stopMonitoring(); // Stop previous if any
+            networkIndicator.stopMonitoring();
         }
         networkIndicator = new NetworkStatusIndicator();
 
-        // --- Top Bar: Back Button, Control Buttons, Network Indicator ---
         Button backButton = new Button("← Back to Home");
         backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;");
         backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #2d3748; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
         backButton.setOnMouseExited(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
         backButton.setOnAction(e -> {
-            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
+            if (networkIndicator != null) networkIndicator.stopMonitoring();
             MainView.show();
         });
 
@@ -165,18 +167,28 @@ public class NewOrderView {
             loadMenuItemsFromJson();
         });
 
-        HBox controlButtons = new HBox(10, expandAllBtn, collapseAllBtn, refreshMenuBtn);
+        Button viewOrdersButton = new Button("📜 View Orders");
+        String viewOrdersBtnStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white; -fx-background-color: #3498db;";
+        String viewOrdersBtnHoverStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white; -fx-background-color: #2980b9;";
+        viewOrdersButton.setStyle(viewOrdersBtnStyle);
+        viewOrdersButton.setOnMouseEntered(e -> viewOrdersButton.setStyle(viewOrdersBtnHoverStyle));
+        viewOrdersButton.setOnMouseExited(e -> viewOrdersButton.setStyle(viewOrdersBtnStyle));
+        viewOrdersButton.setOnAction(e -> {
+            ViewOrdersView.show();
+        });
+
+
+        HBox controlButtons = new HBox(10, viewOrdersButton, expandAllBtn, collapseAllBtn, refreshMenuBtn);
         controlButtons.setAlignment(Pos.CENTER_LEFT);
 
-        Region spacer = new Region(); // Spacer for top bar
+        Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox topBar = new HBox(15, networkIndicator, backButton, controlButtons, spacer); // Added networkIndicator
+        HBox topBar = new HBox(15, networkIndicator, backButton, controlButtons, spacer);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(20, 30, 15, 30));
         topBar.setStyle("-fx-background-color: #e2e8f0;");
 
-        // --- Left Section: Menu ---
         searchField = new TextField();
         searchField.setPromptText("Search Ice Cream (Name or Price)...");
         searchField.setStyle("-fx-font-size: 14px; -fx-padding: 8px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
@@ -195,8 +207,6 @@ public class NewOrderView {
 
         populateMenu("");
 
-
-        // --- Right Section: Cart ---
         cartBox = new VBox(10);
         cartBox.setPadding(new Insets(15));
         cartBox.setStyle("-fx-background-color: #fffff0; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;");
@@ -235,13 +245,39 @@ public class NewOrderView {
                 emptyCartAlert.showAndWait();
                 return;
             }
-            Alert alert = new Alert(Alert.AlertType.INFORMATION, "Order placed successfully!", ButtonType.OK);
-            alert.setHeaderText(null);
-            alert.setTitle("Order Confirmation");
-            alert.showAndWait();
+
+            List<OrderItem> currentOrderItems = new ArrayList<>();
+            for (Map.Entry<String, Integer> cartEntry : cartItems.entrySet()) {
+                String itemName = cartEntry.getKey();
+                Integer quantity = cartEntry.getValue();
+                MenuItem menuItemDetails = allMenuItems.get(itemName);
+
+                if (menuItemDetails != null) {
+                    currentOrderItems.add(new OrderItem(itemName, quantity, menuItemDetails.getPrice()));
+                } else {
+                    System.err.println("Error: Could not find details for item in cart: " + itemName);
+                }
+            }
+
+            if (!currentOrderItems.isEmpty()) {
+                Order newOrder = new Order(currentOrderItems);
+                OrderExcelUtil.saveOrderToExcel(newOrder);
+
+                Alert alert = new Alert(Alert.AlertType.INFORMATION, "Order placed successfully and saved!\nOrder ID: " + newOrder.getOrderId(), ButtonType.OK);
+                alert.setHeaderText(null);
+                alert.setTitle("Order Confirmation");
+                alert.showAndWait();
+            } else {
+                Alert errorAlert = new Alert(Alert.AlertType.ERROR, "Could not process order. No valid items found in cart.", ButtonType.OK);
+                errorAlert.setHeaderText(null);
+                errorAlert.setTitle("Order Processing Error");
+                errorAlert.showAndWait();
+                return;
+            }
+
             cartItems.clear();
             refreshCart();
-            if (networkIndicator != null) networkIndicator.stopMonitoring(); // Stop before switching view
+            if (networkIndicator != null) networkIndicator.stopMonitoring();
             MainView.show();
         });
 
@@ -499,24 +535,25 @@ public class NewOrderView {
         imgView.setPreserveRatio(true);
 
         Label nameLabel = new Label(item.getName());
-        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
+        // Updated style for item name in cart: bigger and bold
+        nameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
         Label priceInfoLabel = new Label(String.format("₹%d x %d", item.getPrice(), quantity));
         priceInfoLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #4b5563;");
         Label subtotalLabelText = new Label(String.format("Sub: ₹%.2f", subtotal));
         subtotalLabelText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;");
 
         Button plusButton = new Button("+");
-        styleCartControlButton(plusButton);
+        styleCartControlButton(plusButton, true); // Pass true to indicate it's a bigger button
         plusButton.setOnAction(e -> {
             cartItems.put(item.getName(), cartItems.get(item.getName()) + 1);
             refreshCart();
         });
 
         Label quantityLabel = new Label(String.valueOf(quantity));
-        quantityLabel.setStyle("-fx-font-size: 14px; -fx-padding: 0 5px;");
+        quantityLabel.setStyle("-fx-font-size: 15px; -fx-padding: 0 8px; -fx-font-weight: bold;"); // Made quantity label bigger and bold
 
         Button minusButton = new Button("-");
-        styleCartControlButton(minusButton);
+        styleCartControlButton(minusButton, true); // Pass true to indicate it's a bigger button
         minusButton.setOnAction(e -> {
             if (cartItems.get(item.getName()) > 1) {
                 cartItems.put(item.getName(), cartItems.get(item.getName()) - 1);
@@ -526,7 +563,7 @@ public class NewOrderView {
             refreshCart();
         });
 
-        HBox quantityControls = new HBox(5, minusButton, quantityLabel, plusButton);
+        HBox quantityControls = new HBox(8, minusButton, quantityLabel, plusButton); // Increased spacing
         quantityControls.setAlignment(Pos.CENTER_LEFT);
 
         VBox itemDetails = new VBox(5, nameLabel, priceInfoLabel, quantityControls);
@@ -546,11 +583,25 @@ public class NewOrderView {
         return cartItemBox;
     }
 
-    private static void styleCartControlButton(Button button) {
-        button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;");
-        button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937;"));
-        button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;"));
+    // Overloaded or modified method to handle different button sizes if needed
+    private static void styleCartControlButton(Button button, boolean isBig) {
+        if (isBig) {
+            button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;");
+            button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
+            button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
+        } else { // Original smaller style if needed elsewhere, or just remove this else block
+            button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;");
+            button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937;"));
+            button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;"));
+        }
     }
+    // If only one size is needed now, simplify styleCartControlButton:
+    // private static void styleCartControlButton(Button button) {
+    //     button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;");
+    //     button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
+    //     button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
+    // }
+
 
     private static void toggleAllCategoryPanes(boolean expand) {
         if (categoryPanesList != null) {
@@ -559,11 +610,10 @@ public class NewOrderView {
             }
         }
     }
-    // Method to explicitly stop monitoring if NewOrderView is being replaced
     public static void stopNetworkIndicator() {
         if (networkIndicator != null) {
             networkIndicator.stopMonitoring();
-            networkIndicator = null; // Allow garbage collection
+            networkIndicator = null;
         }
     }
 }
