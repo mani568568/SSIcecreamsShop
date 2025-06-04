@@ -166,11 +166,18 @@ public class ManageInventoryView {
 
         // --- Control Buttons for Table (Refresh, Export, Import) ---
         Button refreshButton = new Button("🔄 Refresh View");
-        refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white;");
+        refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;");
+        String refreshButtonHoverStyle = "-fx-background-color: #0056b3; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
+        refreshButton.setOnMouseEntered(e -> refreshButton.setStyle(refreshButtonHoverStyle));
+        refreshButton.setOnMouseExited(e -> refreshButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"));
         refreshButton.setOnAction(e -> loadInventoryData());
 
         Button exportButton = new Button("📤 Export to Excel");
-        exportButton.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white;"); // Green color
+        String exportButtonStyle = "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"; // Green color
+        String exportButtonHoverStyle = "-fx-background-color: #229954; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;";
+        exportButton.setStyle(exportButtonStyle);
+        exportButton.setOnMouseEntered(e -> exportButton.setStyle(exportButtonHoverStyle));
+        exportButton.setOnMouseExited(e -> exportButton.setStyle(exportButtonStyle));
         exportButton.setOnAction(e -> ExcelExportUtil.exportToExcel(inventoryStage));
 
         Button importButton = new Button("📥 Import from Excel");
@@ -269,42 +276,22 @@ public class ManageInventoryView {
     }
 
     private static void handleDeleteItem(DisplayMenuItem itemToDelete) {
+        // Modified confirmation message to reflect that the image file will NOT be deleted.
         Optional<ButtonType> result = showAlertWithConfirmation("Confirm Delete",
                 "Are you sure you want to delete the item '" + itemToDelete.getName() + "' from category '" + itemToDelete.getCategory() + "'?\n" +
-                        "This will also attempt to delete its image file: " + itemToDelete.getImageName());
+                        "The item record will be removed from the inventory. The image file itself will NOT be deleted from the disk.");
 
         if (result.isPresent() && result.get() == ButtonType.OK) {
             boolean jsonUpdated = removeItemFromJson(itemToDelete);
             if (jsonUpdated) {
-                // Attempt to delete the image file
-                if (itemToDelete.getImageName() != null && !itemToDelete.getImageName().isEmpty()) {
-                    try {
-                        Path imageDirectory = Paths.get(ConfigManager.getImagePath());
-                        Path imagePath = imageDirectory.resolve(itemToDelete.getImageName());
-
-                        if (Files.exists(imagePath) && !Files.isDirectory(imagePath)) { // Ensure it's a file
-                            Files.delete(imagePath);
-                            System.out.println("Deleted image file: " + imagePath.toString());
-                        } else if (Files.isDirectory(imagePath)) {
-                            System.out.println("Image path is a directory, not deleting: " + imagePath.toString());
-                        }
-                        else {
-                            System.out.println("Image file not found for deletion: " + imagePath.toString());
-                        }
-                    } catch (IOException e) {
-                        System.err.println("Error deleting image file " + itemToDelete.getImageName() + ": " + e.getMessage());
-                        showAlert(Alert.AlertType.WARNING, "Image Deletion Warning", "Item removed from inventory, but could not delete image file: " + itemToDelete.getImageName() + "\nError: " + e.getMessage());
-                    } catch (SecurityException se) {
-                        System.err.println("Security Exception deleting image file " + itemToDelete.getImageName() + ": " + se.getMessage());
-                        showAlert(Alert.AlertType.ERROR, "Image Deletion Error", "Permission denied when trying to delete image file: " + itemToDelete.getImageName());
-                    }
-                }
+                // The section for deleting the image file has been REMOVED.
+                // System.out.println("Image file '" + itemToDelete.getImageName() + "' will NOT be deleted from the disk as per new requirement.");
 
                 loadInventoryData(); // Refresh this view's table
                 NewOrderView.loadMenuItemsFromJson(); // Refresh data in NewOrderView
                 NewOrderView.refreshMenuView();       // Refresh NewOrderView's UI
 
-                showAlert(Alert.AlertType.INFORMATION, "Delete Successful", "Item '" + itemToDelete.getName() + "' has been deleted.");
+                showAlert(Alert.AlertType.INFORMATION, "Delete Successful", "Item '" + itemToDelete.getName() + "' has been removed from the inventory records.");
             } else {
                 showAlert(Alert.AlertType.ERROR, "Delete Failed", "Could not delete item '" + itemToDelete.getName() + "' from the inventory file.");
             }
