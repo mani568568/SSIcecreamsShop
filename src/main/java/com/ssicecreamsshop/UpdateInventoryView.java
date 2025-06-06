@@ -14,8 +14,8 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
-import javafx.scene.input.KeyCode; // Added import
-import javafx.scene.input.KeyEvent; // Added import
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
@@ -56,6 +56,8 @@ public class UpdateInventoryView {
     private static final String BUTTON_ACTION_YELLOW_HOVER = "#FFA000";
     private static final String BUTTON_ACTION_RED = "#F44336";
     private static final String BUTTON_ACTION_RED_HOVER = "#D32F2F";
+    private static final String BUTTON_ACTION_ORANGE = "#FF9800";
+    private static final String BUTTON_ACTION_ORANGE_HOVER = "#F57C00";
     private static final String TEXT_ON_YELLOW = "#212121";
 
 
@@ -67,15 +69,13 @@ public class UpdateInventoryView {
         stage = new Stage();
         stage.initModality(Modality.APPLICATION_MODAL);
         stage.setTitle("📦 Update Item Stock");
-        stage.setMinWidth(950);
+        stage.setMinWidth(1100);
         stage.setMinHeight(700);
 
         try {
             Image appIcon = new Image(UpdateInventoryView.class.getResourceAsStream("/images/app_icon.png"));
             stage.getIcons().add(appIcon);
-        } catch (Exception e) {
-            System.err.println("Error loading icon for Update Stock window: " + e.getMessage());
-        }
+        } catch (Exception e) { System.err.println("Error loading icon for Update Stock window: " + e.getMessage()); }
 
         Label titleLabel = new Label("Update Inventory Stock");
         titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_NAVY + ";");
@@ -115,14 +115,7 @@ public class UpdateInventoryView {
         mainLayout.setStyle("-fx-background-color: " + BACKGROUND_MAIN + ";");
 
         Scene scene = new Scene(mainLayout);
-
-        // --- ADDED: ESC key listener to close the window ---
-        scene.setOnKeyPressed(event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                stage.close();
-            }
-        });
-
+        scene.setOnKeyPressed(event -> { if (event.getCode() == KeyCode.ESCAPE) stage.close(); });
         stage.setScene(scene);
         loadInventoryData();
         stage.showAndWait();
@@ -152,21 +145,20 @@ public class UpdateInventoryView {
         updateActionCol.setSortable(false);
         updateActionCol.setCellFactory(param -> new UpdateCell());
 
-        TableColumn<InventoryItem, Void> deleteActionCol = new TableColumn<>("Remove");
-        deleteActionCol.setPrefWidth(100);
-        deleteActionCol.setSortable(false);
-        deleteActionCol.setCellFactory(param -> new DeleteCell());
+        TableColumn<InventoryItem, Void> specialActionCol = new TableColumn<>("Special Actions");
+        specialActionCol.setPrefWidth(220);
+        specialActionCol.setSortable(false);
+        specialActionCol.setCellFactory(param -> new SpecialActionCell());
 
-
-        tableView.getColumns().addAll(nameCol, categoryCol, quantityCol, updateActionCol, deleteActionCol);
+        tableView.getColumns().addAll(nameCol, categoryCol, quantityCol, updateActionCol, specialActionCol);
     }
 
-    private static void loadInventoryData() {
+    public static void loadInventoryData() {
         inventoryList.clear();
         Path menuItemsPathObj = Paths.get(ConfigManager.getMenuItemsJsonPath());
         if (!Files.exists(menuItemsPathObj)) return;
 
-        try (java.io.InputStream inputStream = Files.newInputStream(menuItemsPathObj)) {
+        try (InputStream inputStream = Files.newInputStream(menuItemsPathObj)) {
             String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8)).lines().collect(Collectors.joining("\n"));
             JSONObject jsonObject = new JSONObject(jsonText);
             JSONArray categoriesArray = jsonObject.optJSONArray("categories");
@@ -232,6 +224,53 @@ public class UpdateInventoryView {
         } catch (IOException | JSONException e) {
             e.printStackTrace();
             Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error", "Failed to update stock quantity."));
+        }
+    }
+
+    /**
+     * Finds an item in the JSON and removes its 'quantity' key, effectively making it unlimited.
+     * @param itemName The name of the item to update.
+     * @param category The category of the item.
+     * @return true if the item was found and updated, false otherwise.
+     */
+    public static boolean setItemStockToUnlimited(String itemName, String category) {
+        Path menuItemsPath = Paths.get(ConfigManager.getMenuItemsJsonPath());
+        File menuFile = menuItemsPath.toFile();
+        if (!menuFile.exists()) return false;
+
+        try {
+            String content = new String(Files.readAllBytes(menuItemsPath), StandardCharsets.UTF_8);
+            JSONObject rootJson = new JSONObject(content);
+            JSONArray categoriesArray = rootJson.getJSONArray("categories");
+            boolean updated = false;
+
+            for (int i = 0; i < categoriesArray.length(); i++) {
+                JSONObject categoryObj = categoriesArray.getJSONObject(i);
+                if (categoryObj.getString("name").equalsIgnoreCase(category)) {
+                    JSONArray itemsArray = categoryObj.getJSONArray("items");
+                    for (int j = 0; j < itemsArray.length(); j++) {
+                        JSONObject itemObj = itemsArray.getJSONObject(j);
+                        if (itemObj.getString("name").equalsIgnoreCase(itemName)) {
+                            if (itemObj.has("quantity")) {
+                                itemObj.remove("quantity");
+                                updated = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if(updated) break;
+            }
+
+            if (updated) {
+                try (FileWriter writer = new FileWriter(menuFile)) {
+                    writer.write(rootJson.toString(4));
+                }
+            }
+            return updated;
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -383,11 +422,57 @@ public class UpdateInventoryView {
         @Override
         protected void updateItem(Void item, boolean empty) {
             super.updateItem(item, empty);
+            setGraphic(empty ? null : deleteButton);
+            setAlignment(Pos.CENTER);
+        }
+    }
+
+    private static class SpecialActionCell extends TableCell<InventoryItem, Void> {
+        private final Button makeUnlimitedButton = new Button("Make Unlimited");
+        private final Button deleteButton = new Button("Delete 🗑️");
+        private final HBox pane = new HBox(10, makeUnlimitedButton, deleteButton);
+
+        SpecialActionCell() {
+            pane.setAlignment(Pos.CENTER);
+            styleControlButton(makeUnlimitedButton, BUTTON_ACTION_ORANGE, BUTTON_ACTION_ORANGE_HOVER);
+            styleControlButton(deleteButton, BUTTON_ACTION_RED, BUTTON_ACTION_RED_HOVER);
+
+            makeUnlimitedButton.setOnAction(event -> {
+                InventoryItem item = getTableView().getItems().get(getIndex());
+                if (setItemStockToUnlimited(item.getName(), item.getCategory())) {
+                    showAlert(Alert.AlertType.INFORMATION, "Success", "Stock for '" + item.getName() + "' is now unlimited.");
+                    loadInventoryData();
+                    NewOrderView.loadMenuItemsFromJson();
+                    NewOrderView.refreshMenuView();
+                } else {
+                    showAlert(Alert.AlertType.ERROR, "Error", "Could not update item stock.");
+                }
+            });
+
+            deleteButton.setOnAction(event -> {
+                InventoryItem item = getTableView().getItems().get(getIndex());
+                handleDeleteItem(item);
+            });
+        }
+
+        @Override
+        protected void updateItem(Void item, boolean empty) {
+            super.updateItem(item, empty);
             if (empty) {
                 setGraphic(null);
             } else {
-                setGraphic(deleteButton);
-                setAlignment(Pos.CENTER);
+                InventoryItem inventoryItem = getTableView().getItems().get(getIndex());
+                boolean isOutOfStock = false;
+                try {
+                    int qty = Integer.parseInt(inventoryItem.getQuantity());
+                    if (qty <= 0) {
+                        isOutOfStock = true;
+                    }
+                } catch (NumberFormatException e) {
+                    isOutOfStock = false;
+                }
+                makeUnlimitedButton.setDisable(!isOutOfStock);
+                setGraphic(pane);
             }
         }
     }

@@ -12,6 +12,7 @@ import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -103,7 +104,9 @@ public class NewOrderView {
         try (InputStream inputStream = Files.newInputStream(menuJsonPath)) {
             String jsonText = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8)).lines().collect(Collectors.joining("\n"));
             JSONObject jsonObject = new JSONObject(jsonText);
-            JSONArray categoriesArray = jsonObject.getJSONArray("categories");
+            JSONArray categoriesArray = jsonObject.optJSONArray("categories");
+            if (categoriesArray == null) return;
+
             for (int i = 0; i < categoriesArray.length(); i++) {
                 JSONObject categoryObj = categoriesArray.getJSONObject(i);
                 String categoryName = categoryObj.getString("name");
@@ -123,20 +126,6 @@ public class NewOrderView {
             showErrorDialog("Menu Load Error", "Error loading menu: " + e.getMessage());
         }
         if (menuVBox != null) refreshMenuView();
-    }
-
-    private static void showErrorDialog(String title, String content) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle(title);
-            alert.setHeaderText(null);
-            alert.setContentText(content);
-            DialogPane dialogPane = alert.getDialogPane();
-            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
-            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
-            if(okButton != null) okButton.setStyle("-fx-background-color: " + BUTTON_ACTION_RED + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
-            alert.showAndWait();
-        });
     }
 
     public static void show() {
@@ -256,9 +245,8 @@ public class NewOrderView {
     }
 
     private static void updateMenuDisplay(String filter) {
-        if (menuVBox == null || searchField == null) {
-            return;
-        }
+        if (menuVBox == null || searchField == null) return;
+
         menuVBox.getChildren().clear();
         menuVBox.getChildren().add(searchField);
         categoryPanesList.clear();
@@ -275,8 +263,7 @@ public class NewOrderView {
 
         for (Map.Entry<String, List<MenuItem>> categoryEntry : categorizedMenuItems.entrySet()) {
             String categoryName = categoryEntry.getKey();
-            List<MenuItem> itemsInCategory = categoryEntry.getValue();
-            List<MenuItem> filteredItems = itemsInCategory.stream()
+            List<MenuItem> filteredItems = categoryEntry.getValue().stream()
                     .filter(item -> (lowerCaseFilter.isEmpty() || item.getName().toLowerCase().contains(lowerCaseFilter) || String.valueOf(item.getPrice()).contains(lowerCaseFilter)))
                     .collect(Collectors.toList());
 
@@ -483,8 +470,23 @@ public class NewOrderView {
 
         if (outOfStock) {
             card.setOpacity(0.6);
-            card.setDisable(true);
             card.setStyle("-fx-background-color: #f5f5f5; -fx-background-radius: 12px; -fx-border-color: #e0e0e0;");
+            card.setOnMouseClicked(event -> {
+                if (event.getButton().equals(MouseButton.PRIMARY) && event.getClickCount() == 3) {
+                    System.out.println("Triple-click detected on out-of-stock item: " + item.getName());
+                    String itemCategory = findCategoryOfItem(item.getName());
+                    if (itemCategory != null) {
+                        boolean success = UpdateInventoryView.setItemStockToUnlimited(item.getName(), itemCategory);
+                        if (success) {
+                            Platform.runLater(() -> {
+                                showAlert(Alert.AlertType.INFORMATION, "Stock Updated", item.getName() + " is now set to Unlimited stock.");
+                                loadMenuItemsFromJson();
+                                refreshMenuView();
+                            });
+                        }
+                    }
+                }
+            });
         } else {
             card.setOnMouseEntered(e -> card.setStyle(hoverCardStyle));
             card.setOnMouseExited(e -> card.setStyle(baseCardStyle + " -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 6, 0.1, 0, 1);"));
@@ -594,23 +596,48 @@ public class NewOrderView {
         } catch (IOException | JSONException e) { e.printStackTrace(); return false; }
     }
 
+    private static String findCategoryOfItem(String itemName) {
+        for (Map.Entry<String, List<MenuItem>> entry : categorizedMenuItems.entrySet()) {
+            for (MenuItem item : entry.getValue()) {
+                if (item.getName().equals(itemName)) {
+                    return entry.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
     private static void showAlert(Alert.AlertType alertType, String title, String message) {
         Platform.runLater(() -> {
             Alert alert = new Alert(alertType);
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
-            // Themed dialog pane
+            DialogPane dialogPane = alert.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN + ";");
+            Button okButton = (Button) dialogPane.lookupButton(alert.getButtonTypes().get(0));
+            if (okButton != null) {
+                String baseColor = alertType == Alert.AlertType.ERROR || alertType == Alert.AlertType.WARNING ? BUTTON_ACTION_RED : PRIMARY_NAVY;
+                String hoverColor = alertType == Alert.AlertType.ERROR || alertType == Alert.AlertType.WARNING ? BUTTON_ACTION_RED_HOVER : PRIMARY_NAVY_DARK;
+                String btnStyle = "-fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;";
+                okButton.setStyle(btnStyle + "-fx-background-color: " + baseColor + ";");
+                okButton.setOnMouseEntered(e -> okButton.setStyle(btnStyle + "-fx-background-color: " + hoverColor + ";"));
+                okButton.setOnMouseExited(e -> okButton.setStyle(btnStyle + "-fx-background-color: " + baseColor + ";"));
+            }
+            alert.showAndWait();
+        });
+    }
+
+    private static void showErrorDialog(String title, String content) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(null);
+            alert.setContentText(content);
             DialogPane dialogPane = alert.getDialogPane();
             dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
-            Button okButton = (Button) dialogPane.lookupButton(alert.getButtonTypes().get(0));
-            if(okButton != null) {
-                String baseColor = alertType == Alert.AlertType.ERROR ? BUTTON_ACTION_RED : PRIMARY_NAVY;
-                String hoverColor = alertType == Alert.AlertType.ERROR ? BUTTON_ACTION_RED_HOVER : PRIMARY_NAVY_DARK;
-                okButton.setStyle("-fx-background-color: " + baseColor + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
-                okButton.setOnMouseEntered(e -> okButton.setStyle("-fx-background-color: " + hoverColor + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
-                okButton.setOnMouseExited(e -> okButton.setStyle("-fx-background-color: " + baseColor + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;"));
-            }
+            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+            if(okButton != null) okButton.setStyle("-fx-background-color: " + BUTTON_ACTION_RED + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
             alert.showAndWait();
         });
     }
