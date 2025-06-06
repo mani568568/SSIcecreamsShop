@@ -68,10 +68,11 @@ public class ViewOrdersView {
 
     private static DatePicker startDatePicker;
     private static DatePicker endDatePicker;
+    private static Label totalAmountLabel;
     private static TextField searchField;
 
     private static final DateTimeFormatter TABLE_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    // Corrected the typo in the pattern from "cccc" to "yyyy"
+    private static final DateTimeFormatter DATE_FILTER_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DIALOG_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy 'at' hh:mm a");
 
 
@@ -98,63 +99,46 @@ public class ViewOrdersView {
         styleTopBarButton(refreshButton, BUTTON_ACTION_BLUE, BUTTON_ACTION_BLUE_HOVER);
         refreshButton.setOnAction(e -> loadOrders());
 
-        Button exportButton = new Button("📤 Export View");
-        styleTopBarButton(exportButton, BUTTON_ACTION_GREEN, BUTTON_ACTION_GREEN_HOVER);
-        exportButton.setOnAction(e -> ExcelExportUtil.exportOrdersToExcel(new ArrayList<>(ordersTable.getItems()), viewOrdersStage));
-
-        Button importButton = new Button("📥 Import Orders");
-        styleTopBarButton(importButton, ACCENT_YELLOW, ACCENT_YELLOW_DARK, TEXT_ON_YELLOW);
-        importButton.setOnAction(e -> {
-            ExcelExportUtil.importOrdersFromExcel(viewOrdersStage);
-            loadOrders();
-        });
-
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox topBar = new HBox(15, backButton, refreshButton, exportButton, importButton, spacer);
+        HBox topBar = new HBox(15, backButton, refreshButton, spacer);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(15, 25, 15, 25));
         topBar.setStyle("-fx-background-color: " + BACKGROUND_CONTENT + "; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 0 0 1px 0;");
         topBar.setEffect(new DropShadow(5, 0, 2, Color.web(SHADOW_COLOR)));
 
-        // --- Filter & Search Section ---
+        // --- Date Filter Section ---
         Label startDateLabel = new Label("From:");
         startDatePicker = new DatePicker();
         startDatePicker.setPromptText("Start Date");
-        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
 
         Label endDateLabel = new Label("To:");
         endDatePicker = new DatePicker();
         endDatePicker.setPromptText("End Date");
-        endDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
 
-        searchField = new TextField();
-        searchField.setPromptText("🔍 Search by Order ID or Item Name...");
-        searchField.setPrefWidth(250);
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+        Button calculateTotalButton = new Button("Calculate Total");
+        styleTopBarButton(calculateTotalButton, BUTTON_ACTION_GREEN, BUTTON_ACTION_GREEN_HOVER);
+        calculateTotalButton.setOnAction(e -> calculateAndShowTotalForDateRange());
 
-        Button clearFiltersButton = new Button("Clear Filters");
-        clearFiltersButton.setOnAction(e -> {
-            startDatePicker.setValue(null);
-            endDatePicker.setValue(null);
-            searchField.clear();
-        });
+        totalAmountLabel = new Label();
+        totalAmountLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 0 0 0 15px; -fx-text-fill: " + BUTTON_ACTION_GREEN_HOVER + ";");
 
         HBox filterBox = new HBox(10,
                 startDateLabel, startDatePicker,
                 endDateLabel, endDatePicker,
-                new Region() {{ HBox.setHgrow(this, Priority.ALWAYS); }},
-                searchField, clearFiltersButton
+                new Region() {{ HBox.setHgrow(this, Priority.SOMETIMES); setMinWidth(25);}},
+                calculateTotalButton, totalAmountLabel
         );
         filterBox.setAlignment(Pos.CENTER_LEFT);
         filterBox.setPadding(new Insets(15, 25, 15, 25));
         filterBox.setStyle("-fx-background-color: #f1f3f8; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 0 0 1px 0;");
 
+
         // --- Orders Table ---
         ordersTable = new TableView<>();
         setupTableColumns();
 
-        filteredOrdersList = new FilteredList<>(masterOrdersList, p -> true); // Wrap master list
+        filteredOrdersList = new FilteredList<>(masterOrdersList, p -> true);
         SortedList<DisplayableOrder> sortedData = new SortedList<>(filteredOrdersList);
         sortedData.comparatorProperty().bind(ordersTable.comparatorProperty());
         ordersTable.setItems(sortedData);
@@ -166,13 +150,6 @@ public class ViewOrdersView {
         mainLayout.setStyle("-fx-background-color: " + BACKGROUND_MAIN + ";");
 
         Scene scene = new Scene(mainLayout);
-
-        // Add ESC key listener to close the main ViewOrders window
-        scene.setOnKeyPressed(event -> {
-            if (event.getCode() == KeyCode.ESCAPE) {
-                viewOrdersStage.close();
-            }
-        });
 
         viewOrdersStage.setScene(scene);
 
@@ -189,19 +166,6 @@ public class ViewOrdersView {
         idCol.setPrefWidth(280);
         idCol.setStyle(cellStyle);
 
-        TableColumn<DisplayableOrder, String> itemsCol = new TableColumn<>("Items Summary");
-        itemsCol.setCellValueFactory(new PropertyValueFactory<>("itemsSummary"));
-        itemsCol.setPrefWidth(300);
-        itemsCol.setCellFactory(tc -> {
-            TableCell<DisplayableOrder, String> cell = new TableCell<>();
-            Label label = new Label();
-            label.setWrapText(true);
-            cell.setGraphic(label);
-            cell.prefHeightProperty().bind(label.heightProperty());
-            label.textProperty().bind(cell.itemProperty());
-            return cell;
-        });
-
         TableColumn<DisplayableOrder, String> createdCol = new TableColumn<>("Created On");
         createdCol.setCellValueFactory(new PropertyValueFactory<>("createdDateTime"));
         createdCol.setPrefWidth(160);
@@ -213,36 +177,51 @@ public class ViewOrdersView {
         totalCol.setStyle("-fx-alignment: CENTER_RIGHT; -fx-font-weight: bold; -fx-padding: 8px;");
 
         TableColumn<DisplayableOrder, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(200); // Increased width for two buttons
+        actionCol.setPrefWidth(200);
         actionCol.setSortable(false);
-        actionCol.setCellFactory(param -> new ActionCell()); // Use combined cell factory
+        actionCol.setCellFactory(param -> new ActionCell());
 
-        ordersTable.getColumns().addAll(idCol, itemsCol, createdCol, totalCol, actionCol);
+        ordersTable.getColumns().addAll(idCol, createdCol, totalCol, actionCol);
     }
 
-    private static void applyFilters() {
+    private static void calculateAndShowTotalForDateRange() {
         LocalDate startDate = startDatePicker.getValue();
         LocalDate endDate = endDatePicker.getValue();
-        String searchText = searchField.getText() == null ? "" : searchField.getText().toLowerCase();
 
-        filteredOrdersList.setPredicate(order -> {
-            boolean dateMatch = true;
-            if (startDate != null && order.getOriginalCreatedDateTime().toLocalDate().isBefore(startDate)) {
-                dateMatch = false;
-            }
-            if (endDate != null && order.getOriginalCreatedDateTime().toLocalDate().isAfter(endDate)) {
-                dateMatch = false;
-            }
+        if (startDate == null || endDate == null) {
+            showAlert(Alert.AlertType.WARNING, "Date Range Incomplete", "Please select both a start and end date.", viewOrdersStage);
+            return;
+        }
+        if (startDate.isAfter(endDate)) {
+            showAlert(Alert.AlertType.WARNING, "Invalid Date Range", "Start date cannot be after end date.", viewOrdersStage);
+            return;
+        }
 
-            boolean searchMatch = true;
-            if (!searchText.isEmpty()) {
-                searchMatch = order.getOrderId().toLowerCase().contains(searchText) ||
-                        order.getItemsSummary().toLowerCase().contains(searchText);
-            }
+        double totalForRange = 0;
+        int transactionsInRange = 0;
 
-            return dateMatch && searchMatch;
-        });
+        List<Order> allOrders = OrderExcelUtil.loadOrdersFromExcel();
+
+        for (Order order : allOrders) {
+            LocalDate orderDate = order.getCreatedDateTime().toLocalDate();
+            if (!orderDate.isBefore(startDate) && !orderDate.isAfter(endDate)) {
+                totalForRange += order.getOrderTotalAmount();
+                transactionsInRange++;
+            }
+        }
+
+        String totalText = String.format("Total for selected range (%s to %s): ₹%.2f",
+                startDate.format(DATE_FILTER_FORMATTER),
+                endDate.format(DATE_FILTER_FORMATTER),
+                totalForRange);
+
+        showAlert(Alert.AlertType.INFORMATION, "Date Range Calculation",
+                totalText + "\n(" + transactionsInRange + " transactions found)",
+                viewOrdersStage);
+
+        totalAmountLabel.setText(String.format("Range Total: ₹%.2f", totalForRange));
     }
+
 
     private static void loadOrders() {
         masterOrdersList.clear();
@@ -270,7 +249,9 @@ public class ViewOrdersView {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
-            if (owner != null && owner.isShowing()) alert.initOwner(owner);
+            if (owner != null && owner.isShowing()) {
+                alert.initOwner(owner);
+            }
             alert.showAndWait();
         });
     }
@@ -286,7 +267,9 @@ public class ViewOrdersView {
         if (okButton != null) styleTopBarButton(okButton, BUTTON_ACTION_GREEN, BUTTON_ACTION_GREEN_HOVER);
         Button cancelButton = (Button) dialogPane.lookupButton(ButtonType.CANCEL);
         if (cancelButton != null) styleTopBarButton(cancelButton, BUTTON_ACTION_RED, BUTTON_ACTION_RED_HOVER);
-        if (owner != null && owner.isShowing()) alert.initOwner(owner);
+        if (owner != null && owner.isShowing()) {
+            alert.initOwner(owner);
+        }
         return alert.showAndWait();
     }
 
@@ -380,7 +363,6 @@ public class ViewOrdersView {
 
         Scene dialogScene = new Scene(dialogLayout);
 
-        // Add ESC key listener to close the dialog
         dialogScene.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ESCAPE) {
                 dialogStage.close();

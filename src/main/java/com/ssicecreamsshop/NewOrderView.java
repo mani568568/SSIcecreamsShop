@@ -128,6 +128,20 @@ public class NewOrderView {
         if (menuVBox != null) refreshMenuView();
     }
 
+    private static void showErrorDialog(String title, String content) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(null);
+            alert.setContentText(content);
+            DialogPane dialogPane = alert.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+            if(okButton != null) okButton.setStyle("-fx-background-color: " + BUTTON_ACTION_RED + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
+            alert.showAndWait();
+        });
+    }
+
     public static void show() {
         Button backButton = new Button("← Back");
         String backBtnBase = "-fx-font-size: 14px; -fx-text-fill: " + TEXT_ON_LIGHT_PRIMARY + "; -fx-padding: 8 18; -fx-background-radius: 20px; -fx-font-weight: bold;";
@@ -628,17 +642,5 @@ public class NewOrderView {
         });
     }
 
-    private static void showErrorDialog(String title, String content) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle(title);
-            alert.setHeaderText(null);
-            alert.setContentText(content);
-            DialogPane dialogPane = alert.getDialogPane();
-            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
-            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
-            if(okButton != null) okButton.setStyle("-fx-background-color: " + BUTTON_ACTION_RED + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
-            alert.showAndWait();
-        });
-    }
+
 }
