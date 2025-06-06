@@ -17,8 +17,8 @@ public class AppLauncher extends Application {
     private static BorderPane rootLayout; // Main layout for the scene
 
     // IMPORTANT: Replace with your actual bot token and username from BotFather
-    private static final String BOT_TOKEN = "YOUR_BOT_TOKEN_HERE";
-    private static final String BOT_USERNAME = "YOUR_BOT_USERNAME_HERE";
+    private static final String BOT_TOKEN = "7732826808:AAFSzM4UkkIcBkR7NPhO_HMxuQOEEjF2EOc";
+    private static final String BOT_USERNAME = "ssicecreams568_bot";
 
     public static void setScreen(Parent viewRoot) {
         if (rootLayout != null) {
