@@ -6,99 +6,90 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.prefs.Preferences;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class ConfigManager {
     private static final String PREF_NODE_PATH = "com/ssicecreamsshop";
-    private static final String KEY_IMAGE_PATH = "imagePath";
-    private static final String KEY_MENU_JSON_PATH = "menuItemsJsonPath";
+    private static final String KEY_APP_DATA_DIRECTORY = "appDataDirectory"; // Single key for the main folder
 
-    // Default paths will be in a ".SSIceCreamShop" folder in the user's home directory
+    // Default path will be in a ".SSIceCreamShop" folder in the user's home directory
     private static final Path DEFAULT_APP_DATA_DIR = Paths.get(System.getProperty("user.home"), ".SSIceCreamShop");
-    private static final Path DEFAULT_IMAGES_DIR = DEFAULT_APP_DATA_DIR.resolve("images");
-    private static final Path DEFAULT_MENU_JSON_FILE = DEFAULT_APP_DATA_DIR.resolve("menu_items.json");
 
     private static Preferences getPreferences() {
         return Preferences.userRoot().node(PREF_NODE_PATH);
     }
 
     /**
-     * Gets the configured path for the images directory.
-     * Returns a default path if no configuration is found.
-     * @return The images directory path string.
+     * Gets the single, user-configured base data directory path.
+     * @return The path string for the main data directory.
+     */
+    public static String getDataDirectoryPath() {
+        return getPreferences().get(KEY_APP_DATA_DIRECTORY, DEFAULT_APP_DATA_DIR.toString());
+    }
+
+    /**
+     * Sets the single, user-configured base data directory path.
+     * On set, it also ensures the required subdirectories and files are created.
+     * @param path The new base data directory path string.
+     */
+    public static void setDataDirectoryPath(String path) {
+        getPreferences().put(KEY_APP_DATA_DIRECTORY, path);
+        ensureDefaultPathsExist(); // Create directory structure immediately on change
+    }
+
+    /**
+     * Constructs the full path for the 'images' subdirectory based on the main data directory.
+     * @return The full path string for the images directory.
      */
     public static String getImagePath() {
-        return getPreferences().get(KEY_IMAGE_PATH, DEFAULT_IMAGES_DIR.toString());
+        return Paths.get(getDataDirectoryPath(), "images").toString();
     }
 
     /**
-     * Sets and saves the path for the images directory.
-     * @param path The new images directory path string.
-     */
-    public static void setImagePath(String path) {
-        getPreferences().put(KEY_IMAGE_PATH, path);
-        try {
-            // Attempt to create the directory if it doesn't exist when set
-            Files.createDirectories(Paths.get(path));
-        } catch (IOException e) {
-            System.err.println("Warning: Could not create image directory on set: " + path + " - " + e.getMessage());
-        }
-    }
-
-    /**
-     * Gets the configured path for the menu_items.json file.
-     * Returns a default path if no configuration is found.
-     * @return The menu_items.json file path string.
+     * Constructs the full path for the 'menu_items.json' file based on the main data directory.
+     * @return The full path string for the menu JSON file.
      */
     public static String getMenuItemsJsonPath() {
-        return getPreferences().get(KEY_MENU_JSON_PATH, DEFAULT_MENU_JSON_FILE.toString());
+        return Paths.get(getDataDirectoryPath(), "menu_items.json").toString();
     }
 
     /**
-     * Sets and saves the path for the menu_items.json file.
-     * @param path The new menu_items.json file path string.
+     * Constructs the full path for the 'orders.xlsx' file based on the main data directory.
+     * @return The full path string for the orders Excel file.
      */
-    public static void setMenuItemsJsonPath(String path) {
-        getPreferences().put(KEY_MENU_JSON_PATH, path);
-        try {
-            // Attempt to create parent directories if they don't exist when set
-            Path menuPath = Paths.get(path);
-            if (menuPath.getParent() != null) {
-                Files.createDirectories(menuPath.getParent());
-            }
-        } catch (IOException e) {
-            System.err.println("Warning: Could not create parent directory for menu JSON on set: " + path + " - " + e.getMessage());
-        }
+    public static String getOrdersExcelPath() {
+        return Paths.get(getDataDirectoryPath(), "orders.xlsx").toString();
     }
 
     /**
-     * Ensures that default directories and the default menu JSON file (if empty) exist.
-     * This is typically called at application startup.
+     * Ensures that the configured base directory, its 'images' subdirectory,
+     * and a default 'menu_items.json' file exist.
+     * This is typically called at application startup or when the path is changed.
      */
     public static void ensureDefaultPathsExist() {
         try {
-            if (!Files.exists(DEFAULT_APP_DATA_DIR)) {
-                Files.createDirectories(DEFAULT_APP_DATA_DIR);
-                System.out.println("Created default app data directory: " + DEFAULT_APP_DATA_DIR);
+            Path dataDir = Paths.get(getDataDirectoryPath());
+            if (!Files.exists(dataDir)) {
+                Files.createDirectories(dataDir);
+                System.out.println("Created application data directory: " + dataDir);
             }
-            if (!Files.exists(DEFAULT_IMAGES_DIR)) {
-                Files.createDirectories(DEFAULT_IMAGES_DIR);
-                System.out.println("Created default images directory: " + DEFAULT_IMAGES_DIR);
+            Path imagesDir = Paths.get(getImagePath());
+            if (!Files.exists(imagesDir)) {
+                Files.createDirectories(imagesDir);
+                System.out.println("Created images subdirectory: " + imagesDir);
             }
-            if (!Files.exists(DEFAULT_MENU_JSON_FILE)) {
-                String initialJsonContent = "{\"categories\": []}";
-                Files.write(DEFAULT_MENU_JSON_FILE, initialJsonContent.getBytes(StandardCharsets.UTF_8));
-                System.out.println("Created default menu_items.json: " + DEFAULT_MENU_JSON_FILE);
+            Path menuFile = Paths.get(getMenuItemsJsonPath());
+            if (!Files.exists(menuFile)) {
+                JSONObject root = new JSONObject();
+                root.put("categories", new JSONArray());
+                Files.write(menuFile, root.toString(2).getBytes(StandardCharsets.UTF_8));
+                System.out.println("Created empty menu_items.json: " + menuFile);
             }
+            // Note: orders.xlsx is created on-the-fly by OrderExcelUtil when the first order is saved.
         } catch (IOException e) {
-            System.err.println("Critical Error: Could not create default directories/files: " + e.getMessage());
-            // This could be a more user-facing error in a real app
+            System.err.println("CRITICAL ERROR: Could not create default directories/files: " + e.getMessage());
+            // In a real application, you might show a user-facing error here.
         }
     }
-
-    // Static initializer block to ensure default paths are checked/created when class is loaded,
-    // though explicit call in AppLauncher is more controlled.
-    // static {
-    //     ensureDefaultPathsExist();
-    // }
 }
-
