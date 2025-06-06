@@ -10,9 +10,9 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
-import javafx.scene.image.Image; // Added import
-import javafx.scene.input.KeyCode; // Added import
-import javafx.scene.input.KeyEvent; // Added import
+import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
@@ -112,7 +112,7 @@ public class ManageInventoryView {
         quantityField.textProperty().addListener((obs, ov, nv) -> { if (!nv.matches("\\d*")) quantityField.setText(nv.replaceAll("[^\\d]", "")); });
 
 
-        formPane.add(new Label("Item Image:") {{ setStyle(labelStyle); }}, 0, 4);
+        formPane.add(new Label("Item Image (Optional):") {{ setStyle(labelStyle); }}, 0, 4);
         Button browseButton = new Button("Browse...");
         styleDialogButton(browseButton, BUTTON_ACTION_BLUE, BUTTON_ACTION_BLUE_HOVER, false);
         selectedImageLabel = new Label("No image selected");
@@ -146,7 +146,6 @@ public class ManageInventoryView {
 
         Scene scene = new Scene(rootLayout);
 
-        // --- ADDED: ESC key listener to close the window ---
         scene.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ESCAPE) {
                 stage.close();
@@ -166,8 +165,9 @@ public class ManageInventoryView {
         String category = categoryComboBox.getEditor().getText().trim();
         String quantityStr = quantityField.getText().trim();
 
-        if (itemName.isEmpty() || priceStr.isEmpty() || category.isEmpty() || selectedImageFile == null) {
-            showAlert(Alert.AlertType.ERROR, "Input Error", "Name, Price, Category, and Image are all required.");
+        // UPDATED: Removed the image check from the required fields validation
+        if (itemName.isEmpty() || priceStr.isEmpty() || category.isEmpty()) {
+            showAlert(Alert.AlertType.ERROR, "Input Error", "Name, Price, and Category are required.");
             return;
         }
 
@@ -181,17 +181,31 @@ public class ManageInventoryView {
             catch (NumberFormatException e) { showAlert(Alert.AlertType.ERROR, "Input Error", "Quantity must be a valid number."); return; }
         }
 
-        try {
-            Path targetImageDir = Paths.get(ConfigManager.getImagePath());
-            if (!Files.exists(targetImageDir)) Files.createDirectories(targetImageDir);
-            Files.copy(selectedImageFile.toPath(), targetImageDir.resolve(selectedImageFile.getName()), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            showAlert(Alert.AlertType.ERROR, "File Error", "Could not copy image file: " + e.getMessage()); return;
+        String imageFileName = ""; // Default to empty string
+        // UPDATED: Only try to copy the file if one was selected
+        if (selectedImageFile != null) {
+            try {
+                Path targetImageDir = Paths.get(ConfigManager.getImagePath());
+                if (!Files.exists(targetImageDir)) Files.createDirectories(targetImageDir);
+                Path targetPath = targetImageDir.resolve(selectedImageFile.getName());
+                Files.copy(selectedImageFile.toPath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+                imageFileName = selectedImageFile.getName(); // Set the filename
+            } catch (IOException e) {
+                showAlert(Alert.AlertType.ERROR, "File Error", "Could not copy image file: " + e.getMessage());
+                return; // Stop if image was selected but couldn't be copied
+            }
         }
 
-        addItemToJson(category, itemName, price, selectedImageFile.getName(), quantity);
-        itemNameField.clear(); itemPriceField.clear(); categoryComboBox.getEditor().clear(); categoryComboBox.setValue(null);
-        quantityField.clear(); selectedImageFile = null; selectedImageLabel.setText("No image selected");
+        addItemToJson(category, itemName, price, imageFileName, quantity);
+
+        // Reset form fields
+        itemNameField.clear();
+        itemPriceField.clear();
+        categoryComboBox.getEditor().clear();
+        categoryComboBox.setValue(null);
+        quantityField.clear();
+        selectedImageFile = null;
+        selectedImageLabel.setText("No image selected");
         showAlert(Alert.AlertType.INFORMATION, "Success", "Item '" + itemName + "' added to menu!");
     }
 
@@ -220,7 +234,7 @@ public class ManageInventoryView {
 
             JSONObject newItem = new JSONObject();
             newItem.put("name", itemName);
-            newItem.put("imageName", imageName);
+            newItem.put("imageName", imageName); // Will be an empty string if no image was selected
             newItem.put("price", price);
             if (quantity != null) {
                 newItem.put("quantity", quantity.intValue());
@@ -268,7 +282,7 @@ public class ManageInventoryView {
     }
 
 
-    // Utility methods
+    // --- Utility methods ---
     private static void styleDialogButton(Button button, String baseColor, String hoverColor, boolean isPrimary) {
         String padding = isPrimary ? "12 25" : "8 15";
         String fontSize = isPrimary ? "15px" : "13px";
