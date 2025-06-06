@@ -1,4 +1,4 @@
-package com.ssicecreamsshop.utils; // Or com.ssicecreamsshop.config
+package com.ssicecreamsshop.utils;
 
 import com.ssicecreamsshop.ManageInventoryView;
 import com.ssicecreamsshop.NewOrderView;
@@ -7,18 +7,18 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
+import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Cell;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -33,56 +33,77 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ExcelImportDialog {
+
+    // --- Navy Blue & Yellow Theme Colors ---
+    private static final String PRIMARY_NAVY = "#1A237E";
+    private static final String PRIMARY_NAVY_DARK = "#283593";
+    private static final String TEXT_ON_DARK = "white";
+    private static final String BACKGROUND_MAIN = "#E8EAF6";
+    private static final String BORDER_COLOR_LIGHT = "#CFD8DC";
+    private static final String SHADOW_COLOR = "rgba(26, 35, 126, 0.2)";
+    private static final String BUTTON_ACTION_GREEN = "#4CAF50";
+    private static final String BUTTON_ACTION_GREEN_HOVER = "#388E3C";
+    private static final String BUTTON_CLOSE_GRAY = "#95a5a6";
+    private static final String BUTTON_CLOSE_GRAY_HOVER = "#7f8c8d";
+    private static final String BUTTON_ACTION_RED = "#F44336"; // For error alerts
+    private static final String BUTTON_ACTION_RED_HOVER = "#D32F2F";
+
 
     private static Stage dialogStage;
     private static File selectedExcelFile;
     private static Label selectedFileLabel;
     private static TextArea logArea;
 
-    // Define expected column indices (0-based)
     private static final int COL_CATEGORY = 0;
     private static final int COL_ITEM_NAME = 1;
     private static final int COL_PRICE = 2;
     private static final int COL_IMAGE_FILENAME = 3;
+    private static final int COL_QUANTITY = 4;
+
+    private static class ImportedItem {
+        String category, name, imageName;
+        int price;
+        Integer quantity;
+        ImportedItem(String category, String name, int price, String imageName, Integer quantity) {
+            this.category = category; this.name = name; this.price = price; this.imageName = imageName; this.quantity = quantity;
+        }
+    }
 
     public static void show() {
         dialogStage = new Stage();
         dialogStage.initModality(Modality.APPLICATION_MODAL);
         dialogStage.setTitle("📥 Import Menu from Excel");
-        dialogStage.setMinWidth(550);
-        dialogStage.setMinHeight(450);
+        dialogStage.setMinWidth(650);
+        dialogStage.setMinHeight(550);
 
         BorderPane rootLayout = new BorderPane();
-        rootLayout.setStyle("-fx-background-color: #f4f6f8;");
+        rootLayout.setStyle("-fx-background-color: " + BACKGROUND_MAIN + "; -fx-font-family: 'Segoe UI', Arial, sans-serif;");
 
-        // --- Top: File Selection ---
-        VBox topPane = new VBox(15);
-        topPane.setPadding(new Insets(20));
+        VBox topPane = new VBox(18);
+        topPane.setPadding(new Insets(25));
         topPane.setAlignment(Pos.CENTER_LEFT);
+        topPane.setStyle("-fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 0 0 1.5px 0; -fx-background-color: #f1f3f8;");
 
         Label instructionLabel = new Label(
-                "Select an Excel file (.xlsx or .xls) to import menu items.\n" +
-                        "Expected columns: Category, Item Name, Price, Image Filename (in that order).\n" +
-                        "The first row will be skipped (assumed to be headers)."
+                "Select an Excel file (.xlsx or .xls) to import/update menu items.\n" +
+                        "Expected columns: Category, Item Name, Price, Image Filename, Quantity (optional).\n" +
+                        "The first row is assumed to be headers and will be skipped."
         );
         instructionLabel.setWrapText(true);
-        instructionLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #333;");
+        instructionLabel.setStyle("-fx-font-size: 13.5px; -fx-text-fill: #424242; -fx-line-spacing: 3px;");
 
         selectedFileLabel = new Label("No file selected.");
-        selectedFileLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #555;");
+        selectedFileLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_NAVY_DARK + ";");
 
         Button browseButton = new Button("Browse Excel File...");
-        browseButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;");
-        browseButton.setOnMouseEntered(e -> browseButton.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"));
-        browseButton.setOnMouseExited(e -> browseButton.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8 15; -fx-background-radius: 5px;"));
+        styleDialogButton(browseButton, PRIMARY_NAVY, PRIMARY_NAVY_DARK, false);
 
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select Excel Menu File");
-        fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls")
-        );
+        fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"));
         browseButton.setOnAction(e -> {
             selectedExcelFile = fileChooser.showOpenDialog(dialogStage);
             if (selectedExcelFile != null) {
@@ -92,37 +113,46 @@ public class ExcelImportDialog {
                 selectedFileLabel.setText("No file selected.");
             }
         });
-        topPane.getChildren().addAll(instructionLabel, new HBox(10, browseButton, selectedFileLabel));
+        HBox fileSelectionHBox = new HBox(12, browseButton, selectedFileLabel);
+        fileSelectionHBox.setAlignment(Pos.CENTER_LEFT);
+        topPane.getChildren().addAll(instructionLabel, fileSelectionHBox);
         rootLayout.setTop(topPane);
 
-        // --- Center: Log Area ---
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setWrapText(true);
         logArea.setPromptText("Import logs will appear here...");
-        logArea.setStyle("-fx-font-family: 'Monospaced'; -fx-font-size: 12px;");
-        VBox.setVgrow(logArea, Priority.ALWAYS);
-        BorderPane.setMargin(logArea, new Insets(0, 20, 10, 20));
+        logArea.setStyle("-fx-font-family: 'Monospaced', 'Consolas', monospace; -fx-font-size: 12.5px; -fx-control-inner-background: #fafafa; -fx-text-fill: #333; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-radius: 5px; -fx-background-radius: 5px;");
+        logArea.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
+        BorderPane.setMargin(logArea, new Insets(15, 25, 15, 25));
         rootLayout.setCenter(logArea);
 
-
-        // --- Bottom: Action Buttons ---
         Button importButton = new Button("🚀 Import Data");
-        importButton.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-font-size:14px; -fx-background-radius: 5px;");
+        styleDialogButton(importButton, BUTTON_ACTION_GREEN, BUTTON_ACTION_GREEN_HOVER, true);
         importButton.setOnAction(e -> processExcelImport());
 
-        Button closeButton = new Button("Close");
-        closeButton.setStyle("-fx-background-color: #7f8c8d; -fx-text-fill: white; -fx-padding: 10 20;-fx-font-size:14px; -fx-background-radius: 5px;");
+        Button closeButton = new Button("Close Window");
+        styleDialogButton(closeButton, BUTTON_CLOSE_GRAY, BUTTON_CLOSE_GRAY_HOVER, true);
         closeButton.setOnAction(e -> dialogStage.close());
 
         HBox bottomBar = new HBox(20, importButton, closeButton);
-        bottomBar.setAlignment(Pos.CENTER_RIGHT);
-        bottomBar.setPadding(new Insets(15, 20, 20, 20));
+        bottomBar.setAlignment(Pos.CENTER);
+        bottomBar.setPadding(new Insets(20, 25, 25, 25));
         rootLayout.setBottom(bottomBar);
 
         Scene scene = new Scene(rootLayout);
         dialogStage.setScene(scene);
         dialogStage.showAndWait();
+    }
+
+    private static void styleDialogButton(Button button, String baseColor, String hoverColor, boolean isPrimary) {
+        String padding = isPrimary ? "10 22" : "8 15";
+        String fontSize = isPrimary ? "14px" : "13px";
+        String style = "-fx-font-size: " + fontSize + "; -fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: " + padding + "; -fx-background-radius: 20px;";
+        button.setStyle(style + "-fx-background-color: " + baseColor + ";");
+        button.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(style + "-fx-background-color: " + hoverColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 7, 0.2, 0, 1);"));
+        button.setOnMouseExited(e -> button.setStyle(style + "-fx-background-color: " + baseColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 3, 0, 0, 0);"));
     }
 
     private static void processExcelImport() {
@@ -133,16 +163,13 @@ public class ExcelImportDialog {
         }
 
         logArea.setText("Starting import from: " + selectedExcelFile.getName() + "...\n");
-        List<ManageInventoryView.DisplayMenuItem> importedItems = new ArrayList<>();
-        int rowNum = 0;
-        int itemsAdded = 0;
-        int itemsUpdated = 0;
-        int itemsSkipped = 0;
+        List<ImportedItem> importedItems = new ArrayList<>();
+        int rowNum = 0; int itemsSkipped = 0;
 
         try (FileInputStream fis = new FileInputStream(selectedExcelFile);
-             Workbook workbook = WorkbookFactory.create(fis)) { // WorkbookFactory handles both .xls and .xlsx
+             Workbook workbook = WorkbookFactory.create(fis)) {
 
-            Sheet sheet = workbook.getSheetAt(0); // Get the first sheet
+            Sheet sheet = workbook.getSheetAt(0);
             if (sheet == null) {
                 showAlert(Alert.AlertType.ERROR, "Import Error", "No sheet found in the Excel file.");
                 logArea.appendText("ERROR: No sheet found in the Excel file.\n");
@@ -153,95 +180,52 @@ public class ExcelImportDialog {
 
             for (Row row : sheet) {
                 rowNum++;
-                if (rowNum == 1) { // Skip header row
-                    logArea.appendText("Skipping header row (Row 1).\n");
-                    continue;
-                }
+                if (rowNum == 1) { logArea.appendText("Skipping header row (Row 1).\n"); continue; }
 
-                Cell categoryCell = row.getCell(COL_CATEGORY);
-                Cell nameCell = row.getCell(COL_ITEM_NAME);
-                Cell priceCell = row.getCell(COL_PRICE);
-                Cell imageCell = row.getCell(COL_IMAGE_FILENAME);
+                Cell categoryCell = row.getCell(COL_CATEGORY); Cell nameCell = row.getCell(COL_ITEM_NAME); Cell priceCell = row.getCell(COL_PRICE);
+                Cell imageCell = row.getCell(COL_IMAGE_FILENAME); Cell quantityCell = row.getCell(COL_QUANTITY);
 
-                // Basic validation: check if essential cells are present and not blank
                 if (isCellEmpty(categoryCell) || isCellEmpty(nameCell) || isCellEmpty(priceCell)) {
                     logArea.appendText("WARNING: Row " + rowNum + ": Skipping due to missing Category, Name, or Price.\n");
-                    itemsSkipped++;
-                    continue;
+                    itemsSkipped++; continue;
                 }
 
                 String category = getCellStringValue(categoryCell).trim();
                 String itemName = getCellStringValue(nameCell).trim();
-                String imageName = isCellEmpty(imageCell) ? "" : getCellStringValue(imageCell).trim(); // Image can be optional
+                String imageName = isCellEmpty(imageCell) ? "" : getCellStringValue(imageCell).trim();
                 int price = 0;
+                Integer quantity = null;
+
+                try { price = (int) Double.parseDouble(getCellStringValue(priceCell)); if (price <= 0) throw new NumberFormatException(); }
+                catch (NumberFormatException e) { logArea.appendText("WARNING: Row " + rowNum + " ("+itemName+"): Invalid price. Skipping.\n"); itemsSkipped++; continue; }
 
                 try {
-                    if (priceCell.getCellType() == CellType.NUMERIC) {
-                        price = (int) priceCell.getNumericCellValue();
-                    } else if (priceCell.getCellType() == CellType.STRING) {
-                        price = Integer.parseInt(priceCell.getStringCellValue().trim());
-                    } else {
-                        logArea.appendText("WARNING: Row " + rowNum + " ("+itemName+"): Invalid price format. Skipping item.\n");
-                        itemsSkipped++;
-                        continue;
-                    }
-                    if (price <= 0) {
-                        logArea.appendText("WARNING: Row " + rowNum + " ("+itemName+"): Price must be positive. Skipping item.\n");
-                        itemsSkipped++;
-                        continue;
-                    }
-                } catch (NumberFormatException e) {
-                    logArea.appendText("WARNING: Row " + rowNum + " ("+itemName+"): Could not parse price. Skipping item. Error: " + e.getMessage() + "\n");
-                    itemsSkipped++;
-                    continue;
-                }
+                    if (!isCellEmpty(quantityCell)) quantity = (int) Double.parseDouble(getCellStringValue(quantityCell));
+                } catch (NumberFormatException e) { logArea.appendText("WARNING: Row " + rowNum + " ("+itemName+"): Invalid quantity. Stock will be unlimited. \n"); }
 
-                if (imageName.isEmpty()){
-                    logArea.appendText("INFO: Row " + rowNum + " ("+itemName+"): No image filename provided.\n");
-                }
-
-
-                importedItems.add(new ManageInventoryView.DisplayMenuItem(category, itemName, imageName, price));
-                logArea.appendText("Read Row " + rowNum + ": " + category + ", " + itemName + ", " + price + ", " + imageName + "\n");
+                importedItems.add(new ImportedItem(category, itemName, price, imageName, quantity));
+                logArea.appendText("Read Row " + rowNum + ": " + category + ", " + itemName + ", " + price + ", " + (quantity != null ? quantity : "Unlimited") + "\n");
             }
 
-            if (importedItems.isEmpty() && rowNum > 1) {
-                logArea.appendText("No valid items found in the Excel file to import (after skipping header).\n");
+            if (importedItems.isEmpty()) {
+                logArea.appendText("No valid items found to import.\n");
                 showAlert(Alert.AlertType.INFORMATION, "Import Complete", "No valid items were found in the Excel file to import.");
                 return;
-            } else if (importedItems.isEmpty()) {
-                logArea.appendText("Excel file seems empty or only contains a header.\n");
-                showAlert(Alert.AlertType.INFORMATION, "Import Complete", "Excel file seems empty or only contains a header.");
-                return;
             }
 
-
-            // Now update the JSON file
             logArea.appendText("\nUpdating menu_items.json...\n");
             UpdateResult result = batchUpdateItemsInJson(importedItems);
-            itemsAdded = result.itemsAdded;
-            itemsUpdated = result.itemsUpdated;
 
-            logArea.appendText("JSON update complete. Added: " + itemsAdded + ", Updated: " + itemsUpdated + ".\n");
+            logArea.appendText("JSON update complete. Added: " + result.itemsAdded + ", Updated: " + result.itemsUpdated + ".\n");
 
-            // Refresh application views
             ManageInventoryView.loadInventoryData();
             NewOrderView.loadMenuItemsFromJson();
             NewOrderView.refreshMenuView();
             logArea.appendText("Application views refreshed.\n");
 
-            showAlert(Alert.AlertType.INFORMATION, "Import Successful",
-                    "Excel import complete!\n\n" +
-                            "Items Read from Excel: " + importedItems.size() + "\n" +
-                            "Items Added to JSON: " + itemsAdded + "\n" +
-                            "Items Updated in JSON: " + itemsUpdated + "\n" +
-                            "Items Skipped (due to errors): " + itemsSkipped);
+            showAlert(Alert.AlertType.INFORMATION, "Import Successful", "Excel import complete!\n\n" + "Items Added: " + result.itemsAdded + "\n" + "Items Updated: " + result.itemsUpdated + "\n" + "Items Skipped: " + itemsSkipped);
 
-        } catch (IOException e) {
-            logArea.appendText("ERROR: Could not read Excel file: " + e.getMessage() + "\n");
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Import Error", "Could not read Excel file: " + e.getMessage());
-        } catch (Exception e) { // Catch any other unexpected errors
+        } catch (Exception e) {
             logArea.appendText("UNEXPECTED ERROR during import: " + e.getMessage() + "\n");
             e.printStackTrace();
             showAlert(Alert.AlertType.ERROR, "Import Error", "An unexpected error occurred: " + e.getMessage());
@@ -250,64 +234,19 @@ public class ExcelImportDialog {
 
     private static String getCellStringValue(Cell cell) {
         if (cell == null) return "";
-        switch (cell.getCellType()) {
-            case STRING:
-                return cell.getStringCellValue();
-            case NUMERIC:
-                // Handle numeric cells that might represent numbers or text-like numbers
-                DataFormatter formatter = new DataFormatter();
-                return formatter.formatCellValue(cell); // This handles formatting well
-            case BOOLEAN:
-                return String.valueOf(cell.getBooleanCellValue());
-            case FORMULA:
-                // For formulas, try to evaluate and get the result as string
-                try {
-                    return cell.getStringCellValue(); // If formula result is string
-                } catch (IllegalStateException e) {
-                    DataFormatter formulaFormatter = new DataFormatter();
-                    return formulaFormatter.formatCellValue(cell, new FormulaEvaluator() {
-                        @Override public void clearAllCachedResultValues() {}
-                        @Override public void notifySetFormula(Cell c) {}
-                        @Override public void notifyDeleteCell(Cell c) {}
-                        @Override public void notifyUpdateCell(Cell c) {}
-
-                        @Override
-                        public void evaluateAll() {
-
-                        }
-
-                        @Override public CellValue evaluate(Cell c) { return null; } // Dummy
-
-                        @Override
-                        public CellType evaluateFormulaCell(Cell cell) {
-                            return null;
-                        }
-
-                        @Override public Cell evaluateInCell(Cell c) { return null; } // Dummy
-                        @Override public void setupReferencedWorkbooks(java.util.Map<String, FormulaEvaluator> workbooks) {}
-                        @Override public void setDebugEvaluationOutputForNextEval(boolean value) {}
-                        @Override public void setIgnoreMissingWorkbooks(boolean ignore) {}
-                    });
-                }
-            default:
-                return "";
-        }
+        DataFormatter formatter = new DataFormatter();
+        return formatter.formatCellValue(cell).trim();
     }
 
     private static boolean isCellEmpty(Cell cell) {
-        if (cell == null || cell.getCellType() == CellType.BLANK) {
-            return true;
-        }
+        if (cell == null || cell.getCellType() == CellType.BLANK) return true;
         return cell.getCellType() == CellType.STRING && cell.getStringCellValue().trim().isEmpty();
     }
 
 
-    private static class UpdateResult {
-        int itemsAdded = 0;
-        int itemsUpdated = 0;
-    }
+    private static class UpdateResult { int itemsAdded = 0; int itemsUpdated = 0; }
 
-    private static UpdateResult batchUpdateItemsInJson(List<ManageInventoryView.DisplayMenuItem> itemsToImport) {
+    private static UpdateResult batchUpdateItemsInJson(List<ImportedItem> itemsToImport) {
         UpdateResult result = new UpdateResult();
         String menuJsonPathStr = ConfigManager.getMenuItemsJsonPath();
         File menuFile = new File(menuJsonPathStr);
@@ -315,85 +254,53 @@ public class ExcelImportDialog {
 
         try {
             Path menuPathObj = Paths.get(menuJsonPathStr);
-            if (menuPathObj.getParent() != null && !Files.exists(menuPathObj.getParent())) {
-                Files.createDirectories(menuPathObj.getParent());
-                logArea.appendText("Created parent directory for JSON: " + menuPathObj.getParent() + "\n");
-            }
-
-            if (menuFile.exists() && menuFile.length() > 0) {
-                String content = new String(Files.readAllBytes(menuFile.toPath()), StandardCharsets.UTF_8);
-                rootJson = new JSONObject(content);
-            } else {
-                rootJson = new JSONObject();
-                rootJson.put("categories", new JSONArray());
-                logArea.appendText("menu_items.json not found or empty. Created new structure.\n");
-            }
+            if (menuPathObj.getParent() != null && !Files.exists(menuPathObj.getParent())) Files.createDirectories(menuPathObj.getParent());
+            if (menuFile.exists() && menuFile.length() > 0) rootJson = new JSONObject(new String(Files.readAllBytes(menuFile.toPath()), StandardCharsets.UTF_8));
+            else { rootJson = new JSONObject(); rootJson.put("categories", new JSONArray()); }
 
             JSONArray categoriesArray = rootJson.getJSONArray("categories");
 
-            for (ManageInventoryView.DisplayMenuItem itemToImport : itemsToImport) {
-                String categoryName = itemToImport.getCategory();
-                String itemName = itemToImport.getName();
-                int price = itemToImport.getPrice();
-                String imageName = itemToImport.getImageName();
-
+            for (ImportedItem itemToImport : itemsToImport) {
                 JSONObject targetCategory = null;
                 for (int i = 0; i < categoriesArray.length(); i++) {
                     JSONObject cat = categoriesArray.getJSONObject(i);
-                    if (cat.getString("name").equalsIgnoreCase(categoryName)) {
-                        targetCategory = cat;
-                        break;
+                    if (cat.getString("name").equalsIgnoreCase(itemToImport.category)) {
+                        targetCategory = cat; break;
                     }
                 }
-
-                if (targetCategory == null) { // Category doesn't exist, create it
-                    targetCategory = new JSONObject();
-                    targetCategory.put("name", categoryName);
-                    targetCategory.put("items", new JSONArray());
-                    categoriesArray.put(targetCategory);
-                    logArea.appendText("Created new category: " + categoryName + "\n");
+                if (targetCategory == null) {
+                    targetCategory = new JSONObject(); targetCategory.put("name", itemToImport.category);
+                    targetCategory.put("items", new JSONArray()); categoriesArray.put(targetCategory);
                 }
 
                 JSONArray itemsArray = targetCategory.getJSONArray("items");
                 boolean itemFoundAndUpdated = false;
                 for (int i = 0; i < itemsArray.length(); i++) {
                     JSONObject existingItem = itemsArray.getJSONObject(i);
-                    if (existingItem.getString("name").equalsIgnoreCase(itemName)) {
-                        // Item exists, update it
-                        existingItem.put("price", price);
-                        existingItem.put("imageName", imageName); // Update image name as well
-                        itemFoundAndUpdated = true;
-                        result.itemsUpdated++;
-                        logArea.appendText("Updated item: " + itemName + " in category " + categoryName + "\n");
+                    if (existingItem.getString("name").equalsIgnoreCase(itemToImport.name)) {
+                        existingItem.put("price", itemToImport.price);
+                        existingItem.put("imageName", itemToImport.imageName);
+                        if (itemToImport.quantity != null) existingItem.put("quantity", itemToImport.quantity);
+                        else existingItem.remove("quantity"); // Remove for unlimited
+                        itemFoundAndUpdated = true; result.itemsUpdated++;
+                        logArea.appendText("Updated item: " + itemToImport.name + "\n");
                         break;
                     }
                 }
 
-                if (!itemFoundAndUpdated) { // Item does not exist, add it
-                    JSONObject newItem = new JSONObject();
-                    newItem.put("name", itemName);
-                    newItem.put("imageName", imageName);
-                    newItem.put("price", price);
-                    itemsArray.put(newItem);
-                    result.itemsAdded++;
-                    logArea.appendText("Added new item: " + itemName + " to category " + categoryName + "\n");
+                if (!itemFoundAndUpdated) {
+                    JSONObject newItem = new JSONObject(); newItem.put("name", itemToImport.name);
+                    newItem.put("imageName", itemToImport.imageName); newItem.put("price", itemToImport.price);
+                    if (itemToImport.quantity != null) newItem.put("quantity", itemToImport.quantity);
+                    itemsArray.put(newItem); result.itemsAdded++;
+                    logArea.appendText("Added new item: " + itemToImport.name + "\n");
                 }
             }
-
-            // Write the updated JSON back to file
-            try (FileWriter writer = new FileWriter(menuFile)) {
-                writer.write(rootJson.toString(4)); // 4 for pretty print
-                logArea.appendText("Successfully wrote updates to " + menuJsonPathStr + "\n");
-            }
-
-        } catch (IOException e) {
-            logArea.appendText("ERROR writing to JSON file '" + menuJsonPathStr + "': " + e.getMessage() + "\n");
+            try (FileWriter writer = new FileWriter(menuFile)) { writer.write(rootJson.toString(4)); }
+        } catch (Exception e) {
+            logArea.appendText("ERROR writing to JSON file: " + e.getMessage() + "\n");
             e.printStackTrace();
             showAlert(Alert.AlertType.ERROR, "JSON Write Error", "Could not write to menu_items.json: " + e.getMessage());
-        } catch (JSONException e) {
-            logArea.appendText("ERROR processing JSON data: " + e.getMessage() + "\n");
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "JSON Processing Error", "Error with JSON structure: " + e.getMessage());
         }
         return result;
     }
@@ -405,6 +312,17 @@ public class ExcelImportDialog {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(message);
+            DialogPane dialogPane = alert.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+            Button button = (Button) dialogPane.lookupButton(alert.getButtonTypes().get(0));
+            if (button != null) {
+                String baseColor = alertType == Alert.AlertType.ERROR || alertType == Alert.AlertType.WARNING ? BUTTON_ACTION_RED : PRIMARY_NAVY;
+                String hoverColor = alertType == Alert.AlertType.ERROR || alertType == Alert.AlertType.WARNING ? BUTTON_ACTION_RED_HOVER : PRIMARY_NAVY_DARK;
+                String btnStyle = "-fx-text-fill: " + TEXT_ON_DARK + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;";
+                button.setStyle(btnStyle + "-fx-background-color: " + baseColor + ";");
+                button.setOnMouseEntered(e -> button.setStyle(btnStyle + "-fx-background-color: " + hoverColor + ";"));
+                button.setOnMouseExited(e -> button.setStyle(btnStyle + "-fx-background-color: " + baseColor + ";"));
+            }
             alert.initOwner(dialogStage);
             alert.showAndWait();
         });
