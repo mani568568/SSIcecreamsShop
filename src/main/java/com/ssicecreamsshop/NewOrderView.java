@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow; // For material shadow effect
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
@@ -37,6 +38,27 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class NewOrderView {
+
+    // --- Blue Material Theme Colors ---
+    private static final String PRIMARY_BLUE = "#1E88E5"; // Blue 600 (a bit richer than 500)
+    private static final String PRIMARY_BLUE_DARK = "#1565C0"; // Blue 700/800 (for hover, darker elements)
+    private static final String PRIMARY_BLUE_LIGHT = "#90CAF9"; // Blue 200 (for light backgrounds/accents)
+    private static final String ACCENT_BLUE = "#42A5F5"; // Blue 400 (for important actions, slightly lighter)
+    private static final String ACCENT_BLUE_DARK = "#1976D2"; // Blue 700 (darker accent for hover)
+
+    private static final String TEXT_ON_BLUE = "white";
+    private static final String TEXT_ON_WHITE_PRIMARY = "#212121"; // Primary text on light bg
+    private static final String TEXT_ON_WHITE_SECONDARY = "#757575"; // Secondary text on light bg
+    private static final String BORDER_COLOR_LIGHT = "#BBDEFB"; // Blue 100 (very light border)
+    private static final String BACKGROUND_MAIN = "#E3F2FD"; // Blue 50 (very light blue for overall background)
+    private static final String BACKGROUND_CONTENT_AREA = "#FFFFFF"; // White for content cards/areas
+    private static final String BACKGROUND_ACCENT_LIGHT = "#E1F5FE"; // Light Cyan A100 (subtle accent bg)
+    private static final String SHADOW_COLOR = "rgba(0,0,0,0.15)"; // Softer shadow
+    private static final String BUTTON_ACTION_GREEN = "#4CAF50"; // Green for confirm
+    private static final String BUTTON_ACTION_GREEN_HOVER = "#388E3C";
+    private static final String BUTTON_ACTION_RED = "#F44336"; // Red for clear/cancel
+    private static final String BUTTON_ACTION_RED_HOVER = "#D32F2F";
+
 
     // MenuItem inner class remains the same
     private static class MenuItem {
@@ -133,6 +155,10 @@ public class NewOrderView {
             alert.setTitle(title);
             alert.setHeaderText(null);
             alert.setContentText(content);
+            DialogPane dialogPane = alert.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+            if(okButton != null) okButton.setStyle("-fx-background-color: " + ACCENT_BLUE + "; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
             alert.showAndWait();
         });
     }
@@ -144,39 +170,36 @@ public class NewOrderView {
         }
         networkIndicator = new NetworkStatusIndicator();
 
-        Button backButton = new Button("← Back to Home");
-        backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;");
-        backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #2d3748; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
-        backButton.setOnMouseExited(e -> backButton.setStyle("-fx-font-size: 14px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 8 15; -fx-background-radius: 8;"));
+        Button backButton = new Button("← Back");
+        String backBtnBase = "-fx-font-size: 14px; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-padding: 8 18; -fx-background-radius: 20px; -fx-font-weight: bold;"; // Adjusted padding
+        backButton.setStyle(backBtnBase + "-fx-background-color: " + PRIMARY_BLUE_DARK + ";");
+        backButton.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
+        backButton.setOnMouseEntered(e -> backButton.setStyle(backBtnBase + "-fx-background-color: " + ACCENT_BLUE_DARK + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 7, 0.2, 0, 2);"));
+        backButton.setOnMouseExited(e -> backButton.setStyle(backBtnBase + "-fx-background-color: " + PRIMARY_BLUE_DARK + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 3, 0, 0, 0);"));
         backButton.setOnAction(e -> {
             if (networkIndicator != null) networkIndicator.stopMonitoring();
             MainView.show();
         });
 
         Button expandAllBtn = new Button("Expand All");
-        styleControlButton(expandAllBtn);
+        styleControlButton(expandAllBtn, PRIMARY_BLUE, PRIMARY_BLUE_DARK);
         expandAllBtn.setOnAction(e -> toggleAllCategoryPanes(true));
 
-        Button collapseAllBtn = new Button("Collapse All");
-        styleControlButton(collapseAllBtn);
-        collapseAllBtn.setOnAction(e -> toggleAllCategoryPanes(false));
-
-        Button refreshMenuBtn = new Button("🔄 Refresh Menu");
-        styleControlButton(refreshMenuBtn);
-        refreshMenuBtn.setOnAction(e -> {
-            loadMenuItemsFromJson();
-        });
-
-        Button viewOrdersButton = new Button("📜 View Orders");
-        String viewOrdersBtnStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white; -fx-background-color: #3498db;";
-        String viewOrdersBtnHoverStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white; -fx-background-color: #2980b9;";
-        viewOrdersButton.setStyle(viewOrdersBtnStyle);
-        viewOrdersButton.setOnMouseEntered(e -> viewOrdersButton.setStyle(viewOrdersBtnHoverStyle));
-        viewOrdersButton.setOnMouseExited(e -> viewOrdersButton.setStyle(viewOrdersBtnStyle));
+        Button viewOrdersButton = new Button("📜 Orders");
+        styleControlButton(viewOrdersButton, PRIMARY_BLUE, PRIMARY_BLUE_DARK);
         viewOrdersButton.setOnAction(e -> {
             ViewOrdersView.show();
         });
 
+        Button collapseAllBtn = new Button("Collapse All");
+        styleControlButton(collapseAllBtn, PRIMARY_BLUE, PRIMARY_BLUE_DARK);
+        collapseAllBtn.setOnAction(e -> toggleAllCategoryPanes(false));
+
+        Button refreshMenuBtn = new Button("🔄 Refresh");
+        styleControlButton(refreshMenuBtn, PRIMARY_BLUE, PRIMARY_BLUE_DARK);
+        refreshMenuBtn.setOnAction(e -> {
+            loadMenuItemsFromJson();
+        });
 
         HBox controlButtons = new HBox(10, viewOrdersButton, expandAllBtn, collapseAllBtn, refreshMenuBtn);
         controlButtons.setAlignment(Pos.CENTER_LEFT);
@@ -186,48 +209,58 @@ public class NewOrderView {
 
         HBox topBar = new HBox(15, networkIndicator, backButton, controlButtons, spacer);
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(20, 30, 15, 30));
-        topBar.setStyle("-fx-background-color: #e2e8f0;");
+        topBar.setPadding(new Insets(15, 25, 15, 25)); // Adjusted padding
+        topBar.setStyle("-fx-background-color: " + PRIMARY_BLUE_LIGHT + "; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 0 0 1.5px 0;");
+        topBar.setEffect(new DropShadow(5, 0, 2, Color.web(SHADOW_COLOR))); // Subtle shadow for top bar
 
         searchField = new TextField();
-        searchField.setPromptText("Search Ice Cream (Name or Price)...");
-        searchField.setStyle("-fx-font-size: 14px; -fx-padding: 8px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
+        searchField.setPromptText("Search Ice Cream...");
+        searchField.setStyle("-fx-font-size: 14px; -fx-padding: 10px 15px; -fx-background-radius: 25px; -fx-border-radius: 25px; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-background-color: white;");
+        searchField.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
         searchField.setMaxWidth(Double.MAX_VALUE);
         searchField.textProperty().addListener((obs, oldVal, newVal) -> populateMenu(newVal));
 
-        menuVBox = new VBox(15);
+        menuVBox = new VBox(18); // Increased spacing
         menuVBox.setPadding(new Insets(20));
-        menuVBox.setStyle("-fx-background-color: #f7fafc;");
+        menuVBox.setStyle("-fx-background-color: " + BACKGROUND_CONTENT_AREA + ";");
 
         ScrollPane menuScroll = new ScrollPane(menuVBox);
         menuScroll.setFitToWidth(true);
         menuScroll.setFitToHeight(true);
         menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        menuScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-border-color: transparent;");
 
         populateMenu("");
 
-        cartBox = new VBox(10);
-        cartBox.setPadding(new Insets(15));
-        cartBox.setStyle("-fx-background-color: #fffff0; -fx-border-color: #e2e8f0; -fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;");
+        cartBox = new VBox(12);
+        cartBox.setPadding(new Insets(20));
+        cartBox.setStyle("-fx-background-color: " + BACKGROUND_ACCENT_LIGHT + "; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 1px; -fx-border-radius: 15px; -fx-background-radius: 15px;");
+        cartBox.setEffect(new DropShadow(8, 2, 2, Color.web(SHADOW_COLOR)));
+
 
         ScrollPane cartScroll = new ScrollPane(cartBox);
         cartScroll.setFitToWidth(true);
         cartScroll.setFitToHeight(true);
         cartScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        cartScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        cartScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-border-color: transparent;");
 
         totalLabel = new Label("Total: ₹0.00");
-        totalLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #2c5282;");
-        totalLabel.setPadding(new Insets(10, 0, 0, 0));
+        totalLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: " + ACCENT_BLUE_DARK + ";");
+        totalLabel.setPadding(new Insets(15, 0, 5, 0));
 
         Button clearBtn = new Button("Clear Cart");
-        styleActionButton(clearBtn, "#ef4444", "#dc2626");
+        styleActionButton(clearBtn, BUTTON_ACTION_RED, BUTTON_ACTION_RED_HOVER);
         clearBtn.setOnAction(e -> {
             Alert confirmClear = new Alert(Alert.AlertType.CONFIRMATION);
             confirmClear.setTitle("Confirm Clear Cart");
             confirmClear.setHeaderText("Are you sure you want to empty your cart?");
             confirmClear.setContentText("This action cannot be undone.");
+            DialogPane dialogPane = confirmClear.getDialogPane();
+            dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+            Button okButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+            if(okButton != null) okButton.setStyle("-fx-background-color: " + BUTTON_ACTION_RED + "; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
+            Button cancelButton = (Button) dialogPane.lookupButton(ButtonType.CANCEL);
+            if(cancelButton != null) cancelButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
             Optional<ButtonType> result = confirmClear.showAndWait();
             if (result.isPresent() && result.get() == ButtonType.OK) {
                 cartItems.clear();
@@ -235,13 +268,16 @@ public class NewOrderView {
             }
         });
 
-        Button placeOrderBtn = new Button("Place Order");
-        styleActionButton(placeOrderBtn, "#10b981", "#059669");
+        Button placeOrderBtn = new Button("Place Order 🛍️");
+        styleActionButton(placeOrderBtn, BUTTON_ACTION_GREEN, BUTTON_ACTION_GREEN_HOVER);
         placeOrderBtn.setOnAction(e -> {
             if (cartItems.isEmpty()) {
                 Alert emptyCartAlert = new Alert(Alert.AlertType.WARNING, "Your cart is empty. Please add items to place an order.", ButtonType.OK);
                 emptyCartAlert.setHeaderText(null);
                 emptyCartAlert.setTitle("Empty Cart");
+                DialogPane dialogPane = emptyCartAlert.getDialogPane();
+                dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+                dialogPane.lookup(".button").setStyle("-fx-background-color: " + PRIMARY_BLUE + "; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
                 emptyCartAlert.showAndWait();
                 return;
             }
@@ -266,12 +302,12 @@ public class NewOrderView {
                 Alert alert = new Alert(Alert.AlertType.INFORMATION, "Order placed successfully and saved!\nOrder ID: " + newOrder.getOrderId(), ButtonType.OK);
                 alert.setHeaderText(null);
                 alert.setTitle("Order Confirmation");
+                DialogPane dialogPane = alert.getDialogPane();
+                dialogPane.setStyle("-fx-font-family: 'Segoe UI', Arial, sans-serif; -fx-font-size: 13px; -fx-background-color: " + BACKGROUND_MAIN +";");
+                dialogPane.lookup(".button").setStyle("-fx-background-color: " + BUTTON_ACTION_GREEN + "; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold; -fx-padding: 6 12px; -fx-background-radius: 4px;");
                 alert.showAndWait();
             } else {
-                Alert errorAlert = new Alert(Alert.AlertType.ERROR, "Could not process order. No valid items found in cart.", ButtonType.OK);
-                errorAlert.setHeaderText(null);
-                errorAlert.setTitle("Order Processing Error");
-                errorAlert.showAndWait();
+                showErrorDialog("Order Processing Error", "Could not process order. No valid items found in cart.");
                 return;
             }
 
@@ -281,46 +317,45 @@ public class NewOrderView {
             MainView.show();
         });
 
-        HBox actionButtons = new HBox(15, clearBtn, placeOrderBtn);
+        HBox actionButtons = new HBox(20, clearBtn, placeOrderBtn);
         actionButtons.setAlignment(Pos.CENTER_RIGHT);
-        actionButtons.setPadding(new Insets(10,0,0,0));
+        actionButtons.setPadding(new Insets(15,0,5,0));
 
-        Label cartTitleLabel = new Label("Your Order");
-        cartTitleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1e40af;");
+        Label cartTitleLabel = new Label("Your Order 🛒");
+        cartTitleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_BLUE_DARK + ";");
 
         VBox cartSection = new VBox(15, cartTitleLabel, cartScroll, totalLabel, actionButtons);
         cartSection.setPadding(new Insets(20));
-        cartSection.setStyle("-fx-background-color: #f0f9ff; -fx-background-radius: 8px;");
+        cartSection.setStyle("-fx-background-color: " + BACKGROUND_CONTENT_AREA + "; -fx-background-radius: 15px;"); // White background for cart area
         VBox.setVgrow(cartScroll, Priority.ALWAYS);
 
         SplitPane splitPane = new SplitPane(menuScroll, cartSection);
         splitPane.setDividerPositions(0.65);
-        HBox.setHgrow(splitPane, Priority.ALWAYS);
-        VBox.setVgrow(splitPane, Priority.ALWAYS);
+        splitPane.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;"); // Make SplitPane transparent
 
         VBox mainLayout = new VBox(topBar, splitPane);
         VBox.setVgrow(splitPane, Priority.ALWAYS);
-        mainLayout.setStyle("-fx-background-color: #cbd5e1;");
+        mainLayout.setStyle("-fx-background-color: " + BACKGROUND_MAIN + ";"); // Overall background
 
         AppLauncher.setScreen(mainLayout);
         refreshCart();
     }
 
-    private static void styleControlButton(Button button) {
-        String baseStyle = "-fx-font-size: 12px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-text-fill: white;";
-        String normalColor = "-fx-background-color: #64748b;";
-        String hoverColor = "-fx-background-color: #475569;";
-        button.setStyle(baseStyle + normalColor);
-        button.setOnMouseEntered(e -> button.setStyle(baseStyle + hoverColor));
-        button.setOnMouseExited(e -> button.setStyle(baseStyle + normalColor));
+    private static void styleControlButton(Button button, String baseColor, String hoverColor) {
+        String baseStyle = "-fx-font-size: 13px; -fx-padding: 7 14; -fx-background-radius: 18px; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold;"; // Adjusted padding & font
+        button.setStyle(baseStyle + "-fx-background-color: " + baseColor + ";");
+        button.setEffect(new DropShadow(2, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(baseStyle + "-fx-background-color: " + hoverColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 5, 0.15, 0, 1);"));
+        button.setOnMouseExited(e -> button.setStyle(baseStyle + "-fx-background-color: " + baseColor + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 2, 0, 0, 0);"));
     }
 
     private static void styleActionButton(Button button, String normalHex, String hoverHex) {
-        String baseStyle = "-fx-font-size: 16px; -fx-padding: 10 20; -fx-background-radius: 8px; -fx-text-fill: white; -fx-font-weight: bold;";
+        String baseStyle = "-fx-font-size: 17px; -fx-padding: 12 25; -fx-background-radius: 25px; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold;"; // Slightly larger
         button.setStyle(baseStyle + "-fx-background-color: " + normalHex + ";");
-        button.setOnMouseEntered(e -> button.setStyle(baseStyle + "-fx-background-color: " + hoverHex + "; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0.2, 0, 1);"));
-        button.setOnMouseExited(e -> button.setStyle(baseStyle + "-fx-background-color: " + normalHex + ";"));
-        button.setMinWidth(120);
+        button.setEffect(new DropShadow(4, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(baseStyle + "-fx-background-color: " + hoverHex + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 8, 0.25, 0, 2);"));
+        button.setOnMouseExited(e -> button.setStyle(baseStyle + "-fx-background-color: " + normalHex + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 4, 0, 0, 0);"));
+        button.setMinWidth(150);
     }
 
     private static void updateMenuDisplay(String filter) {
@@ -333,8 +368,8 @@ public class NewOrderView {
         categoryPanesList.clear();
 
         if (categorizedMenuItems.isEmpty()) {
-            Label infoLabel = new Label("No menu items loaded or available.\nCheck configuration or add items via Manage Inventory.");
-            infoLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: #4a5568; -fx-padding: 20px; -fx-alignment: center;");
+            Label infoLabel = new Label("🍦 No menu items loaded or available.\nCheck configuration or add items via Manage Inventory.");
+            infoLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: " + TEXT_ON_WHITE_SECONDARY + "; -fx-padding: 20px; -fx-alignment: center;");
             infoLabel.setWrapText(true);
             menuVBox.getChildren().add(infoLabel);
             return;
@@ -357,7 +392,7 @@ public class NewOrderView {
 
             if (filteredItems.isEmpty() && !lowerCaseFilter.isEmpty()) continue;
 
-            FlowPane itemsPane = new FlowPane(15, 15);
+            FlowPane itemsPane = new FlowPane(18, 18);
             itemsPane.setPadding(new Insets(15));
             itemsPane.setAlignment(Pos.TOP_LEFT);
 
@@ -369,14 +404,22 @@ public class NewOrderView {
                 TitledPane categoryPane = new TitledPane(categoryName + " (" + filteredItems.size() + ")", itemsPane);
                 categoryPane.setAnimated(true);
                 categoryPane.setExpanded(true);
-                categoryPane.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #334155;");
+                // Themed TitledPane
+                categoryPane.setStyle(
+                        "-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_BLUE_DARK + ";" +
+                                "-fx-base: " + PRIMARY_BLUE_LIGHT + ";" + // Affects arrow and background on hover
+                                "-fx-body-color: " + BACKGROUND_CONTENT_AREA + ";" + // Background of content
+                                "-fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 1px; " +
+                                "-fx-border-radius: 8px; -fx-background-radius: 8px;"
+                );
+                categoryPane.setEffect(new DropShadow(2, Color.web(SHADOW_COLOR)));
                 menuVBox.getChildren().add(categoryPane);
                 categoryPanesList.add(categoryPane);
             }
         }
         if (menuVBox.getChildren().size() == 1 && !lowerCaseFilter.isEmpty()) {
-            Label noResultsLabel = new Label("No items match your search: '" + filter + "'");
-            noResultsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #4a5568; -fx-padding: 10px;");
+            Label noResultsLabel = new Label("😢 No items match your search: '" + filter + "'");
+            noResultsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: " + TEXT_ON_WHITE_SECONDARY + "; -fx-padding: 10px;");
             menuVBox.getChildren().add(noResultsLabel);
         }
     }
@@ -423,43 +466,51 @@ public class NewOrderView {
             imgView.setImage(null);
         }
 
-        imgView.setFitWidth(100);
-        imgView.setFitHeight(100);
+        imgView.setFitWidth(110);
+        imgView.setFitHeight(110);
         imgView.setPreserveRatio(true);
+        // Add rounded corners to images
+        if (imgView.getImage() != null) {
+            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(
+                    imgView.getFitWidth(), imgView.getFitHeight()
+            );
+            clip.setArcWidth(15); clip.setArcHeight(15); // More rounding
+            imgView.setClip(clip);
+        }
+
 
         Label nameLabel = new Label(item.getName());
-        nameLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
+        nameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: " + TEXT_ON_WHITE_PRIMARY + ";");
         Label priceLabel = new Label("₹" + item.getPrice());
-        priceLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: #475569;");
+        priceLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: " + ACCENT_BLUE + "; -fx-font-weight: bold;");
 
-        Node imageNode = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 100);
+        Node imageNode = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 110);
 
-        VBox card = new VBox(8, imageNode, nameLabel, priceLabel);
+        VBox card = new VBox(10, imageNode, nameLabel, priceLabel);
         card.setAlignment(Pos.CENTER);
-        card.setPadding(new Insets(12));
-        String baseCardStyle = "-fx-background-color: #ffffff; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-color: #e2e8f0; -fx-border-width: 1px;";
-        String hoverCardStyle = "-fx-background-color: #f8fafc; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-color: #94a3b8; -fx-border-width: 1px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 8, 0.3, 0, 2);";
+        card.setPadding(new Insets(15));
+        String baseCardStyle = "-fx-background-color: " + BACKGROUND_CONTENT_AREA + "; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 1px;";
+        String hoverCardStyle = "-fx-background-color: #f0f8ff; -fx-background-radius: 12px; -fx-border-radius: 12px; -fx-border-color: " + PRIMARY_BLUE + "; -fx-border-width: 1.5px; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 12, 0.3, 0, 3);";
 
-        card.setStyle(baseCardStyle);
+        card.setStyle(baseCardStyle + " -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 6, 0.1, 0, 1);");
         card.setOnMouseEntered(e -> card.setStyle(hoverCardStyle));
-        card.setOnMouseExited(e -> card.setStyle(baseCardStyle));
+        card.setOnMouseExited(e -> card.setStyle(baseCardStyle + " -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 6, 0.1, 0, 1);"));
         card.setOnMouseClicked(e -> addToCart(item.getName()));
-        card.setMinWidth(150);
-        card.setMaxWidth(150);
+        card.setMinWidth(160);
+        card.setMaxWidth(160);
 
         return card;
     }
 
     private static Pane createPlaceholderGraphic(String text, double size) {
-        Label placeholderText = new Label(text.length() > 0 ? text.substring(0, 1).toUpperCase() : "?");
-        placeholderText.setFont(Font.font("System", FontWeight.BOLD, size * 0.4));
-        placeholderText.setTextFill(Color.SLATEGRAY);
+        Label placeholderText = new Label(text.length() > 0 ? text.substring(0, 1).toUpperCase() : "🍦");
+        placeholderText.setFont(Font.font("Arial", FontWeight.BOLD, size * 0.5));
+        placeholderText.setTextFill(Color.web(PRIMARY_BLUE_DARK));
         StackPane placeholderPane = new StackPane(placeholderText);
         placeholderPane.setPrefSize(size, size);
         placeholderPane.setMinSize(size,size);
         placeholderPane.setMaxSize(size,size);
-        placeholderPane.setStyle("-fx-background-color: #e2e8f0; -fx-border-color: #cbd5e1; -fx-border-width: 1px; -fx-background-radius: 8px; -fx-border-radius: 8px;");
-        placeholderPane.setAlignment(Pos.CENTER);
+        placeholderPane.setStyle("-fx-background-color: " + PRIMARY_BLUE_LIGHT + "; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 1.5px; -fx-background-radius: " + (size/2) + "px; -fx-border-radius: " + (size/2) + "px;"); // Make placeholder circular
         return placeholderPane;
     }
 
@@ -475,9 +526,9 @@ public class NewOrderView {
     private static void refreshCart() {
         cartBox.getChildren().clear();
         if (cartItems.isEmpty()) {
-            Label emptyCartLabel = new Label("Your cart is empty.");
-            emptyCartLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #64748b;");
-            emptyCartLabel.setPadding(new Insets(20));
+            Label emptyCartLabel = new Label("Your cart is empty... Add some treats! 😋");
+            emptyCartLabel.setStyle("-fx-font-size: 15px; -fx-text-fill: " + TEXT_ON_WHITE_SECONDARY + "; -fx-font-weight: bold;");
+            emptyCartLabel.setPadding(new Insets(25));
             cartBox.getChildren().add(emptyCartLabel);
             cartBox.setAlignment(Pos.CENTER);
             totalLabel.setText("Total: ₹0.00");
@@ -530,30 +581,37 @@ public class NewOrderView {
             System.err.println("Unexpected error loading cart image " + imageFilePath + " for " + item.getName() + ": " + e.getMessage());
             imgView.setImage(null);
         }
-        imgView.setFitWidth(50);
-        imgView.setFitHeight(50);
+        imgView.setFitWidth(60);
+        imgView.setFitHeight(60);
         imgView.setPreserveRatio(true);
+        if (imgView.getImage() != null) {
+            javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle(
+                    imgView.getFitWidth(), imgView.getFitHeight()
+            );
+            clip.setArcWidth(10); clip.setArcHeight(10);
+            imgView.setClip(clip);
+        }
+
 
         Label nameLabel = new Label(item.getName());
-        // Updated style for item name in cart: bigger and bold
-        nameLabel.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #1e293b;");
+        nameLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: " + PRIMARY_BLUE_DARK + ";");
         Label priceInfoLabel = new Label(String.format("₹%d x %d", item.getPrice(), quantity));
-        priceInfoLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #4b5563;");
+        priceInfoLabel.setStyle("-fx-font-size: 13px; -fx-text-fill: " + TEXT_ON_WHITE_SECONDARY + ";");
         Label subtotalLabelText = new Label(String.format("Sub: ₹%.2f", subtotal));
-        subtotalLabelText.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;");
+        subtotalLabelText.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: " + ACCENT_BLUE + ";");
 
-        Button plusButton = new Button("+");
-        styleCartControlButton(plusButton, true); // Pass true to indicate it's a bigger button
+        Button plusButton = new Button("➕");
+        styleCartControlButton(plusButton);
         plusButton.setOnAction(e -> {
             cartItems.put(item.getName(), cartItems.get(item.getName()) + 1);
             refreshCart();
         });
 
         Label quantityLabel = new Label(String.valueOf(quantity));
-        quantityLabel.setStyle("-fx-font-size: 15px; -fx-padding: 0 8px; -fx-font-weight: bold;"); // Made quantity label bigger and bold
+        quantityLabel.setStyle("-fx-font-size: 16px; -fx-padding: 0 10px; -fx-font-weight: bold; -fx-text-fill: " + TEXT_ON_WHITE_PRIMARY + ";");
 
-        Button minusButton = new Button("-");
-        styleCartControlButton(minusButton, true); // Pass true to indicate it's a bigger button
+        Button minusButton = new Button("➖");
+        styleCartControlButton(minusButton);
         minusButton.setOnAction(e -> {
             if (cartItems.get(item.getName()) > 1) {
                 cartItems.put(item.getName(), cartItems.get(item.getName()) - 1);
@@ -563,44 +621,34 @@ public class NewOrderView {
             refreshCart();
         });
 
-        HBox quantityControls = new HBox(8, minusButton, quantityLabel, plusButton); // Increased spacing
+        HBox quantityControls = new HBox(10, minusButton, quantityLabel, plusButton);
         quantityControls.setAlignment(Pos.CENTER_LEFT);
 
-        VBox itemDetails = new VBox(5, nameLabel, priceInfoLabel, quantityControls);
+        VBox itemDetails = new VBox(6, nameLabel, priceInfoLabel, quantityControls);
         itemDetails.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(itemDetails, Priority.ALWAYS);
 
         VBox subtotalAndRemove = new VBox(5, subtotalLabelText);
         subtotalAndRemove.setAlignment(Pos.CENTER_RIGHT);
 
-        Node imageNodeCart = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 50);
+        Node imageNodeCart = imgView.getImage() != null ? imgView : createPlaceholderGraphic(item.getName(), 60);
 
-        HBox cartItemBox = new HBox(10, imageNodeCart, itemDetails, subtotalAndRemove);
-        cartItemBox.setPadding(new Insets(10));
-        cartItemBox.setStyle("-fx-background-color: #f0f9ff; -fx-background-radius: 8px; -fx-border-color: #e0f2fe; -fx-border-width: 1px;");
+        HBox cartItemBox = new HBox(15, imageNodeCart, itemDetails, subtotalAndRemove);
+        cartItemBox.setPadding(new Insets(12));
+        cartItemBox.setStyle("-fx-background-color: " + BACKGROUND_CONTENT_AREA + "; -fx-background-radius: 10px; -fx-border-color: " + BORDER_COLOR_LIGHT + "; -fx-border-width: 1px; -fx-border-radius: 10px;");
+        cartItemBox.setEffect(new DropShadow(3, Color.web(SHADOW_COLOR)));
         cartItemBox.setAlignment(Pos.CENTER_LEFT);
 
         return cartItemBox;
     }
 
-    // Overloaded or modified method to handle different button sizes if needed
-    private static void styleCartControlButton(Button button, boolean isBig) {
-        if (isBig) {
-            button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;");
-            button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
-            button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
-        } else { // Original smaller style if needed elsewhere, or just remove this else block
-            button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;");
-            button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937;"));
-            button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 12px; -fx-padding: 3 7; -fx-background-radius: 4px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937;"));
-        }
+    private static void styleCartControlButton(Button button) {
+        String baseCartBtnStyle = "-fx-font-size: 18px; -fx-padding: 6 12; -fx-background-radius: 50px; -fx-text-fill: " + TEXT_ON_BLUE + "; -fx-font-weight: bold;";
+        button.setStyle(baseCartBtnStyle + "-fx-background-color: " + ACCENT_BLUE + ";");
+        button.setEffect(new DropShadow(2, Color.web(SHADOW_COLOR)));
+        button.setOnMouseEntered(e -> button.setStyle(baseCartBtnStyle + "-fx-background-color: " + ACCENT_BLUE_DARK + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 4, 0.15, 0, 1);"));
+        button.setOnMouseExited(e -> button.setStyle(baseCartBtnStyle + "-fx-background-color: " + ACCENT_BLUE + "; -fx-effect: dropshadow(gaussian, " + SHADOW_COLOR + ", 2, 0, 0, 0);"));
     }
-    // If only one size is needed now, simplify styleCartControlButton:
-    // private static void styleCartControlButton(Button button) {
-    //     button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;");
-    //     button.setOnMouseEntered(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #9ca3af; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
-    //     button.setOnMouseExited(e -> button.setStyle("-fx-font-size: 16px; -fx-padding: 5 10; -fx-background-radius: 6px; -fx-background-color: #d1d5db; -fx-text-fill: #1f2937; -fx-font-weight: bold;"));
-    // }
 
 
     private static void toggleAllCategoryPanes(boolean expand) {

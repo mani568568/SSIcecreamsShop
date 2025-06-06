@@ -13,6 +13,8 @@ module com.example.ssicecreamsshop {
     requires java.prefs;
     requires org.apache.poi.poi;
     requires org.apache.poi.ooxml;
+    requires telegrambots.meta;
+    requires telegrambots;
 
     opens com.example.ssicecreamsshop to javafx.fxml;
     exports com.ssicecreamsshop;
